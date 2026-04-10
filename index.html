@@ -3462,6 +3462,10 @@
         </div>
         <div class="navbar-right">
             <button class="theme-btn" id="themeToggle" onclick="toggleTheme()">🌙</button>
+            <button class="cart-btn" id="cartBtn" onclick="toggleCartModal()" style="position: relative; background: transparent; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0.5rem; cursor: pointer; font-size: 1.2rem; transition: all 0.3s ease;">
+                🛒
+                <span id="headerCartCount" style="position: absolute; top: -5px; right: -5px; background: var(--primary); color: white; border-radius: 50%; padding: 0.15rem 0.4rem; font-size: 0.7rem; font-weight: 600; display: none;">0</span>
+            </button>
             <div class="navbar-profile" onclick="showSection('userProfile')">
                 <div class="navbar-avatar" id="navbarAvatar">👤</div>
                 <span class="navbar-username" id="navbarUsername">User</span>
@@ -3523,6 +3527,39 @@
             </div>
         </div>
     </aside>
+
+    <!-- Cart Modal -->
+    <div id="cartModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; backdrop-filter: blur(4px);">
+        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--bg-primary); border-radius: var(--radius-lg); width: 90%; max-width: 500px; max-height: 80vh; overflow: hidden; box-shadow: var(--shadow-xl);">
+            <!-- Header -->
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color);">
+                <h3 style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                    🛒 Your Cart <span id="cartItemCount" style="font-size: 0.875rem; color: var(--text-secondary); font-weight: normal;">(0 items)</span>
+                </h3>
+                <button onclick="closeCartModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">&times;</button>
+            </div>
+
+            <!-- Cart Items -->
+            <div id="cartItemsContainer" style="padding: 1rem; max-height: 50vh; overflow-y: auto;">
+                <div style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                    <div style="font-size: 3rem; margin-bottom: 1rem;">🛒</div>
+                    <p>Your cart is empty</p>
+                    <p style="font-size: 0.875rem; margin-top: 0.5rem;">Add products to get started!</p>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div style="padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); background: var(--bg-secondary);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <span style="font-weight: 600;">Total:</span>
+                    <span id="cartTotalAmount" style="font-size: 1.25rem; font-weight: 700; color: var(--primary);">₹0</span>
+                </div>
+                <button onclick="checkoutSafe()" class="btn btn-primary" style="width: 100%; padding: 0.75rem;">
+                    🛒 Proceed to Buy
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- Admin Sidebar -->
     <aside class="sidebar hidden" id="adminSidebar">
@@ -5822,6 +5859,9 @@
             const tag = getProductTag(product.id);
             const tagBadge = tag ? `<div style="display: inline-block; padding: 0.25rem 0.5rem; background: var(--primary); color: white; border-radius: var(--radius-sm); font-size: 0.75rem; font-weight: 600; margin-bottom: 0.5rem;">${tag}</div>` : '';
 
+            // Add to Cart button (non-breaking)
+            const cartBtn = !isAdminView ? `<button class="btn btn-secondary btn-sm" onclick='addToCartSafe(${JSON.stringify(product).replace(/'/g, "&apos;")})' style="margin-right: 0.5rem;">➕ Add</button>` : '';
+
             return `
                 <div class="product-card">
                     <div class="product-media" style="cursor: ${hasMultipleMedia ? 'pointer' : 'default'};">${mediaGallery}</div>
@@ -5831,7 +5871,7 @@
                         ${priceTag}
                         <p class="product-description">${product.description}</p>
                         <div class="product-rating">${stars}</div>
-                        <div class="product-actions">${buyBtn}</div>
+                        <div class="product-actions" style="display: flex; gap: 0.5rem;">${cartBtn}${buyBtn}</div>
                         ${adminActions}
                     </div>
                 </div>
@@ -6045,6 +6085,184 @@
 
             return stats.clicks > 3 ? 10 : 0;
         }
+
+        // ============================================
+        // SAFE SHOPPING CART SYSTEM
+        // ============================================
+
+        // Cart storage (safe layer)
+        function getCart() {
+            try {
+                return JSON.parse(localStorage.getItem("cart")) || [];
+            } catch {
+                return [];
+            }
+        }
+
+        function saveCart(cart) {
+            localStorage.setItem("cart", JSON.stringify(cart));
+        }
+
+        // Add to cart (non-breaking)
+        function addToCartSafe(product) {
+            let cart = getCart();
+
+            let item = cart.find(p => p.id === product.id);
+
+            if (item) {
+                item.quantity += 1;
+            } else {
+                cart.push({
+                    id: product.id,
+                    name: product.name,
+                    price: product.price,
+                    image: product.image || (product.images && product.images[0]) || '',
+                    affiliateLink: product.affiliateLink,
+                    quantity: 1
+                });
+            }
+
+            saveCart(cart);
+            updateCartCountSafe();
+            showToast(`🛒 Added to cart: ${product.name}`, 'success');
+        }
+
+        // Remove item from cart
+        function removeCartItemSafe(id) {
+            let cart = getCart().filter(p => p.id !== id);
+            saveCart(cart);
+            renderCartSafe();
+            updateCartCountSafe();
+        }
+
+        // Update quantity
+        function updateQtySafe(id, change) {
+            let cart = getCart();
+
+            cart.forEach(item => {
+                if (item.id === id) {
+                    item.quantity += change;
+                    if (item.quantity < 1) item.quantity = 1;
+                }
+            });
+
+            saveCart(cart);
+            renderCartSafe();
+        }
+
+        // Get cart total
+        function getCartTotalSafe() {
+            return getCart().reduce((t, i) => t + (i.price * i.quantity), 0);
+        }
+
+        // Update cart count badge
+        function updateCartCountSafe() {
+            let cart = getCart();
+            let count = cart.reduce((sum, item) => sum + item.quantity, 0);
+
+            // Update header cart badge
+            let headerBadge = document.getElementById("headerCartCount");
+            if (headerBadge) {
+                headerBadge.innerText = count;
+                headerBadge.style.display = count > 0 ? 'inline-block' : 'none';
+            }
+
+            // Update cart modal count
+            let modalCount = document.getElementById("cartItemCount");
+            if (modalCount) {
+                modalCount.innerText = `(${count} items)`;
+            }
+        }
+
+        // Render cart in modal
+        function renderCartSafe() {
+            let cart = getCart();
+            let itemsContainer = document.getElementById("cartItemsContainer");
+
+            if (!itemsContainer) return;
+
+            if (cart.length === 0) {
+                itemsContainer.innerHTML = `
+                    <div style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                        <div style="font-size: 3rem; margin-bottom: 1rem;">🛒</div>
+                        <p>Your cart is empty</p>
+                        <p style="font-size: 0.875rem; margin-top: 0.5rem;">Add products to get started!</p>
+                    </div>
+                `;
+            } else {
+                itemsContainer.innerHTML = cart.map(item => `
+                    <div class="cart-item" style="display: flex; align-items: center; gap: 1rem; padding: 1rem; border-bottom: 1px solid var(--border-color); background: var(--bg-secondary); border-radius: var(--radius-sm); margin-bottom: 0.5rem;">
+                        <img src="${item.image}" alt="${item.name}" style="width: 60px; height: 60px; object-fit: cover; border-radius: var(--radius-sm);">
+                        <div style="flex: 1;">
+                            <p style="font-weight: 600; margin-bottom: 0.25rem;">${item.name}</p>
+                            <p style="color: var(--primary); font-weight: 600;">₹${item.price.toLocaleString()}</p>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <button class="btn btn-secondary btn-sm" onclick="updateQtySafe('${item.id}', -1)" style="padding: 0.25rem 0.5rem;">-</button>
+                            <span style="font-weight: 600; min-width: 1.5rem; text-align: center;">${item.quantity}</span>
+                            <button class="btn btn-secondary btn-sm" onclick="updateQtySafe('${item.id}', 1)" style="padding: 0.25rem 0.5rem;">+</button>
+                        </div>
+                        <button class="btn btn-danger btn-sm" onclick="removeCartItemSafe('${item.id}')" style="padding: 0.25rem 0.5rem;">🗑️</button>
+                    </div>
+                `).join('');
+            }
+
+            // Update total
+            let totalEl = document.getElementById("cartTotalAmount");
+            if (totalEl) {
+                totalEl.innerText = `₹${getCartTotalSafe().toLocaleString()}`;
+            }
+
+            updateCartCountSafe();
+        }
+
+        // Show/Hide cart modal
+        function toggleCartModal() {
+            let modal = document.getElementById("cartModal");
+            if (modal) {
+                modal.style.display = modal.style.display === 'block' ? 'none' : 'block';
+                if (modal.style.display === 'block') {
+                    renderCartSafe();
+                }
+            }
+        }
+
+        // Close cart modal
+        function closeCartModal() {
+            let modal = document.getElementById("cartModal");
+            if (modal) {
+                modal.style.display = 'none';
+            }
+        }
+
+        // Checkout - opens first affiliate link
+        function checkoutSafe() {
+            let cart = getCart();
+
+            if (!cart.length) {
+                showToast('🛒 Cart is empty', 'warning');
+                return;
+            }
+
+            // Track purchase for each item in cart
+            cart.forEach(item => {
+                trackPurchase(item.id);
+            });
+
+            // Open first product affiliate link
+            window.open(cart[0].affiliateLink, "_blank");
+            showToast('🛒 Opening affiliate link...', 'success');
+
+            // Optional: Clear cart after checkout
+            // saveCart([]);
+            // renderCartSafe();
+            // updateCartCountSafe();
+        }
+
+        // Auto-init cart on load
+        window.addEventListener("load", () => {
+            updateCartCountSafe();
+        });
 
         function buyProduct(productId, productName, affiliateLink) {
             // Track click for analytics
