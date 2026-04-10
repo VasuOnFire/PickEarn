@@ -6094,26 +6094,195 @@
             displaySearchResults(results, `Results for "${query}"`);
         }
 
+        // AI Image Matching System with Product Existence Detection
         function handleImageSearch(event) {
             const file = event.target.files[0];
             if (!file) return;
 
-            const keywords = extractKeywords(file.name);
-            showToast(`🔍 Searching for: ${keywords.join(', ')}`, 'info');
+            // Show analyzing loader
+            showToast('🧠 Analyzing image...', 'info');
 
+            const keywords = extractKeywords(file.name);
+            const enhancedKeywords = enhanceKeywords(keywords);
+            const detectedColor = detectColorFromFilename(file.name);
+
+            // Score-based product matching
             const products = DataManager.getProducts();
-            const results = products.filter(p => {
-                const productText = (p.name + ' ' + (p.category || '') + ' ' + (p.description || '')).toLowerCase();
-                return keywords.some(k => productText.includes(k));
+            const scoredResults = products.map(p => {
+                const score = calculateMatchScore(p, enhancedKeywords, detectedColor);
+                return { ...p, score };
+            }).filter(p => p.score > 0).sort((a, b) => b.score - a.score);
+
+            // Debug logging
+            console.log({
+                keywords: enhancedKeywords,
+                detectedColor,
+                results: scoredResults.slice(0, 10),
+                timestamp: new Date().toISOString()
             });
 
-            if (results.length > 0) {
-                displaySearchResults(results, `📷 Image Search Results`);
-                showToast(`✅ Found ${results.length} matching products!`, 'success');
-            } else {
-                displaySearchResults([], `📷 Image Search Results`);
-                showToast('❌ No similar products found', 'warning');
+            // Product existence detection
+            const analysis = checkProductExistence(scoredResults);
+
+            // Debug logging for analysis
+            console.log({
+                analysis,
+                status: analysis.status,
+                dataCount: analysis.data.length
+            });
+
+            // Display results based on existence status
+            displaySmartResults(analysis, enhancedKeywords);
+        }
+
+        function enhanceKeywords(keywords) {
+            // Expand keywords with related terms
+            const synonyms = {
+                'phone': ['mobile', 'smartphone', 'cell', 'cellphone'],
+                'laptop': ['computer', 'notebook', 'pc', 'macbook'],
+                'charger': ['adapter', 'cable', 'power', 'usb'],
+                'watch': ['smartwatch', 'wristwatch', 'fitness', 'tracker'],
+                'headphone': ['earphone', 'earbuds', 'audio', 'headset'],
+                'shoe': ['footwear', 'sneakers', 'boots', 'sandals'],
+                'bag': ['backpack', 'handbag', 'luggage', 'suitcase']
+            };
+
+            const enhanced = [...keywords];
+            keywords.forEach(kw => {
+                Object.keys(synonyms).forEach(key => {
+                    if (kw.includes(key) || key.includes(kw)) {
+                        enhanced.push(...synonyms[key]);
+                    }
+                });
+            });
+
+            return [...new Set(enhanced)]; // Remove duplicates
+        }
+
+        function detectColorFromFilename(filename) {
+            const colors = ['black', 'white', 'red', 'blue', 'green', 'yellow', 'pink', 'purple', 'orange', 'gray', 'silver', 'gold'];
+            const lower = filename.toLowerCase();
+            return colors.find(c => lower.includes(c)) || null;
+        }
+
+        function calculateMatchScore(product, keywords, color) {
+            let score = 0;
+            const productText = (product.name + ' ' + (product.category || '') + ' ' + (product.description || '')).toLowerCase();
+
+            // Keyword matching (50-70% weight)
+            const keywordMatches = keywords.filter(k => productText.includes(k));
+            const keywordScore = (keywordMatches.length / keywords.length) * 70;
+            score += keywordScore;
+
+            // Category matching (+30% bonus)
+            if (product.category) {
+                const catMatches = keywords.some(k => product.category.toLowerCase().includes(k));
+                if (catMatches) score += 30;
             }
+
+            // Color matching (+20% bonus)
+            if (color && productText.includes(color)) {
+                score += 20;
+            }
+
+            return Math.min(score, 100); // Cap at 100
+        }
+
+        function checkProductExistence(results) {
+            let highMatches = results.filter(p => p.score >= 70);
+            let goodMatches = results.filter(p => p.score >= 50);
+
+            if (highMatches.length > 0) {
+                return { status: "exact", data: highMatches };
+            }
+
+            if (goodMatches.length > 0) {
+                return { status: "related", data: goodMatches };
+            }
+
+            if (results.length > 0) {
+                return { status: "suggested", data: results.slice(0, 5) };
+            }
+
+            return { status: "not_found", data: [] };
+        }
+
+        function getMatchLabel(score) {
+            if (score >= 70) return "Exact Match 🔥";
+            if (score >= 50) return "Related Match ✅";
+            return "Suggested Match ⚡";
+        }
+
+        function displaySmartResults(analysis, keywords) {
+            const container = document.getElementById('searchResultsContainer');
+            const grid = document.getElementById('searchResultsGrid');
+            const empty = document.getElementById('searchResultsEmpty');
+            const titleEl = document.getElementById('searchResultsTitle');
+
+            container.style.display = 'block';
+
+            let title = "";
+            let message = "";
+
+            switch (analysis.status) {
+                case "exact":
+                    title = "Exact Matches Found 🔥";
+                    message = `✅ Found ${analysis.data.length} exact matches!`;
+                    showToast(message, 'success');
+                    break;
+
+                case "related":
+                    title = "Related Products ✅";
+                    message = `✅ Found ${analysis.data.length} related products`;
+                    showToast(message, 'success');
+                    break;
+
+                case "suggested":
+                    title = "Suggested Products ⚡";
+                    message = `Showing suggestions based on "${keywords.slice(0, 3).join(', ')}"`;
+                    showToast(message, 'info');
+                    break;
+
+                case "not_found":
+                    title = "Product Not Available ❌";
+                    showToast('❌ No matching products found', 'warning');
+                    break;
+            }
+
+            titleEl.textContent = title;
+
+            // Handle "not_found" with fallback suggestions
+            if (analysis.status === "not_found") {
+                // Try to show any products as fallback
+                const allProducts = DataManager.getProducts();
+                const fallback = allProducts.slice(0, 5);
+
+                grid.innerHTML = `
+                    <div class="no-result" style="grid-column: 1 / -1; text-align: center; padding: 2rem; background: var(--bg-secondary); border-radius: var(--radius-md);">
+                        <div style="font-size: 3rem; margin-bottom: 1rem;">😔</div>
+                        <h3 style="margin-bottom: 0.5rem; color: var(--text-primary);">Product not available in our store</h3>
+                        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Showing some popular items you might like 👇</p>
+                    </div>
+                    ${fallback.map(p => createProductCard(p, false)).join('')}
+                `;
+                empty.style.display = 'none';
+                return;
+            }
+
+            // Display results with match labels
+            if (analysis.data.length === 0) {
+                grid.innerHTML = '';
+                empty.style.display = 'block';
+                return;
+            }
+
+            empty.style.display = 'none';
+            grid.innerHTML = analysis.data.slice(0, 8).map(p => {
+                const label = getMatchLabel(p.score);
+                const card = createProductCard(p, false);
+                // Inject match label into card
+                return card.replace('<div class="product-content">', `<div class="product-content"><div style="display: inline-block; padding: 0.25rem 0.5rem; background: var(--primary); color: white; border-radius: var(--radius-sm); font-size: 0.75rem; margin-bottom: 0.5rem; font-weight: 600;">${label}</div>`);
+            }).join('');
         }
 
         function extractKeywords(filename) {
