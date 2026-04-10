@@ -3190,6 +3190,19 @@
             color: var(--text-secondary);
         }
 
+        /* Smart Search */
+        .smart-search-container { margin: 1rem 0; position: relative; }
+        .search-bar-wrapper { display: flex; align-items: center; background: var(--bg-secondary); border-radius: 50px; padding: 0.75rem 1rem; border: 1px solid var(--border); transition: all 0.3s ease; }
+        .search-bar-wrapper:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2); }
+        .search-icon, .camera-icon { font-size: 1.25rem; cursor: pointer; transition: transform 0.2s; }
+        .camera-icon:hover { transform: scale(1.1); }
+        .smart-search-input { flex: 1; background: transparent; border: none; color: var(--text); font-size: 1rem; padding: 0 0.75rem; outline: none; }
+        .smart-search-input::placeholder { color: var(--text-secondary); }
+        .search-suggestions { position: absolute; top: 100%; left: 0; right: 0; background: var(--bg-secondary); border-radius: 12px; margin-top: 0.5rem; max-height: 200px; overflow-y: auto; z-index: 100; box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
+        .search-suggestion-item { padding: 0.75rem 1rem; cursor: pointer; border-bottom: 1px solid var(--border); transition: background 0.2s; }
+        .search-suggestion-item:hover { background: rgba(99, 102, 241, 0.1); }
+        .search-suggestion-item:last-child { border-bottom: none; }
+
         /* Verification Notice */
         .verification-notice {
             display: flex;
@@ -3653,6 +3666,32 @@
                 <div class="section-header">
                     <h3 class="section-title">🛍️ Available Products</h3>
                 </div>
+
+                <!-- Smart Search Bar -->
+                <div class="smart-search-container">
+                    <div class="search-bar-wrapper">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" class="smart-search-input" id="smartSearchInput" placeholder="Search products..." oninput="handleSmartSearch(this.value)">
+                        <span class="camera-icon" onclick="document.getElementById('searchImageInput').click()">📷</span>
+                        <input type="file" id="searchImageInput" accept="image/*" style="display: none;" onchange="handleImageSearch(event)">
+                    </div>
+                    <div class="search-suggestions" id="searchSuggestions" style="display: none;"></div>
+                </div>
+
+                <!-- Search Results -->
+                <div id="searchResultsContainer" style="display: none;">
+                    <div class="section-header" style="margin-top: 1rem;">
+                        <h4 class="section-title" id="searchResultsTitle">🔍 Search Results</h4>
+                        <button class="btn btn-secondary btn-sm" onclick="clearSearchResults()">Clear</button>
+                    </div>
+                    <div class="products-grid" id="searchResultsGrid"></div>
+                    <div class="empty-state" id="searchResultsEmpty" style="display: none;">
+                        <div class="empty-icon">🔍</div>
+                        <h3>No similar products found</h3>
+                        <p style="color: var(--text-secondary);">Try different keywords or upload another image</p>
+                    </div>
+                </div>
+
                 <div class="products-grid" id="userProductsGrid"></div>
                 <div class="empty-state" id="userEmptyState" style="display: none;">
                     <div class="empty-icon">📦</div>
@@ -5998,6 +6037,112 @@
                     </tr>
                 `;
             }).join('');
+        }
+
+        // Smart Search System
+        function handleSmartSearch(query) {
+            const suggestionsContainer = document.getElementById('searchSuggestions');
+
+            if (!query.trim()) {
+                suggestionsContainer.style.display = 'none';
+                return;
+            }
+
+            const products = DataManager.getProducts();
+            const lowerQuery = query.toLowerCase();
+
+            const matches = products.filter(p =>
+                p.name.toLowerCase().includes(lowerQuery) ||
+                (p.category && p.category.toLowerCase().includes(lowerQuery)) ||
+                (p.description && p.description.toLowerCase().includes(lowerQuery))
+            ).slice(0, 5);
+
+            if (matches.length > 0) {
+                suggestionsContainer.innerHTML = matches.map(p => `
+                    <div class="search-suggestion-item" onclick="showSearchResults('${p.name}')">
+                        <strong>${p.name}</strong> - ₹${p.price || 0}
+                    </div>
+                `).join('');
+                suggestionsContainer.style.display = 'block';
+            } else {
+                suggestionsContainer.style.display = 'none';
+            }
+        }
+
+        function showSearchResults(query) {
+            document.getElementById('smartSearchInput').value = query;
+            document.getElementById('searchSuggestions').style.display = 'none';
+
+            const products = DataManager.getProducts();
+            const lowerQuery = query.toLowerCase();
+
+            const results = products.filter(p =>
+                p.name.toLowerCase().includes(lowerQuery) ||
+                (p.category && p.category.toLowerCase().includes(lowerQuery)) ||
+                (p.description && p.description.toLowerCase().includes(lowerQuery))
+            );
+
+            displaySearchResults(results, `Results for "${query}"`);
+        }
+
+        function handleImageSearch(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const keywords = extractKeywords(file.name);
+            showToast(`🔍 Searching for: ${keywords.join(', ')}`, 'info');
+
+            const products = DataManager.getProducts();
+            const results = products.filter(p => {
+                const productText = (p.name + ' ' + (p.category || '') + ' ' + (p.description || '')).toLowerCase();
+                return keywords.some(k => productText.includes(k));
+            });
+
+            if (results.length > 0) {
+                displaySearchResults(results, `📷 Image Search Results`);
+                showToast(`✅ Found ${results.length} matching products!`, 'success');
+            } else {
+                displaySearchResults([], `📷 Image Search Results`);
+                showToast('❌ No similar products found', 'warning');
+            }
+        }
+
+        function extractKeywords(filename) {
+            return filename
+                .toLowerCase()
+                .replace(/\.[^/.]+$/, '') // Remove extension
+                .replace(/[-_]/g, ' ')     // Replace hyphens/underscores with space
+                .replace(/[^a-z0-9\s]/g, '') // Remove special chars
+                .split(/\s+/)
+                .filter(w => w.length > 2); // Filter short words
+        }
+
+        function displaySearchResults(products, title) {
+            const container = document.getElementById('searchResultsContainer');
+            const grid = document.getElementById('searchResultsGrid');
+            const empty = document.getElementById('searchResultsEmpty');
+            const titleEl = document.getElementById('searchResultsTitle');
+
+            titleEl.textContent = title;
+            container.style.display = 'block';
+
+            if (products.length === 0) {
+                grid.innerHTML = '';
+                empty.style.display = 'block';
+                return;
+            }
+
+            empty.style.display = 'none';
+            grid.innerHTML = products.map(p => createProductCard(p, false)).join('');
+
+            // Scroll to results
+            container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function clearSearchResults() {
+            document.getElementById('searchResultsContainer').style.display = 'none';
+            document.getElementById('smartSearchInput').value = '';
+            document.getElementById('searchSuggestions').style.display = 'none';
         }
 
         // Product Management
