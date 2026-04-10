@@ -1935,6 +1935,12 @@
 
         .modal-actions .btn { flex: 1; }
 
+        /* Password Toggle */
+        .password-wrapper { position: relative; }
+        .password-toggle { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); cursor: pointer; font-size: 1.2rem; user-select: none; opacity: 0.7; transition: opacity 0.2s; }
+        .password-toggle:hover { opacity: 1; }
+        .form-input[type="password"], .form-input[type="text"] { padding-right: 40px; }
+
         /* Loading */
         .loading-overlay {
             position: fixed;
@@ -3393,7 +3399,10 @@
                 </div>
                 <div class="form-group">
                     <label>Password</label>
-                    <input type="password" class="form-input" id="loginPassword" placeholder="Enter password" required>
+                    <div class="password-wrapper">
+                        <input type="password" class="form-input" id="loginPassword" placeholder="Enter password" required>
+                        <span class="password-toggle" onclick="togglePassword('loginPassword', this)">👁️</span>
+                    </div>
                 </div>
                 <button type="submit" class="btn btn-primary">Sign In</button>
             </form>
@@ -3419,7 +3428,10 @@
                 </div>
                 <div class="form-group">
                     <label>Password</label>
-                    <input type="password" class="form-input" id="signupPassword" placeholder="Create password" required>
+                    <div class="password-wrapper">
+                        <input type="password" class="form-input" id="signupPassword" placeholder="Create password" required>
+                        <span class="password-toggle" onclick="togglePassword('signupPassword', this)">👁️</span>
+                    </div>
                 </div>
                 <button type="submit" class="btn btn-primary">Create Account</button>
             </form>
@@ -5160,7 +5172,7 @@
                     }
                 } else {
                     // Show login page if no session
-                    showSection('login');
+                    showSection('authSection');
                 }
 
                 // Play enter sound (optional - will be ignored if no audio context)
@@ -5403,7 +5415,10 @@
                         </div>
                         <div class="form-group">
                             <label>Password</label>
-                            <input type="password" class="form-input" id="adminPassword" placeholder="Password" required>
+                            <div class="password-wrapper">
+                                <input type="password" class="form-input" id="adminPassword" placeholder="Password" required>
+                                <span class="password-toggle" onclick="togglePassword('adminPassword', this)">👁️</span>
+                            </div>
                         </div>
                         <button type="submit" class="btn btn-primary">Sign In</button>
                     </form>
@@ -5456,6 +5471,18 @@
             document.getElementById('adminSidebar').classList.remove('hidden');
             document.getElementById('dashboardLayout').classList.remove('hidden');
             updateAdminDashboard();
+        }
+
+        // Password Toggle Function
+        function togglePassword(inputId, iconElement) {
+            const input = document.getElementById(inputId);
+            if (input.type === 'password') {
+                input.type = 'text';
+                iconElement.textContent = '🙈';
+            } else {
+                input.type = 'password';
+                iconElement.textContent = '👁️';
+            }
         }
 
         function showSection(sectionName) {
