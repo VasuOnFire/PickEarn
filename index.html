@@ -6238,24 +6238,31 @@
             const file = input.files[0];
             if (!file) return;
 
-            if (file.size > 50 * 1024 * 1024) {
-                showToast('Video size must be less than 50MB', 'error');
+            // Validate format
+            if (!file.type.includes('video/mp4')) {
+                showToast('Please upload MP4 format videos only', 'error');
                 return;
             }
 
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const row = input.closest('.media-input-row');
-                const urlInput = row.querySelector('.product-video-input');
-                urlInput.value = e.target.result; // Base64 data URL for persistence
-                urlInput.dataset.filename = file.name;
-                updateMediaPreviews();
-                showToast('Video uploaded successfully!', 'success');
-            };
-            reader.onerror = () => {
-                showToast('Error uploading video. Please try again.', 'error');
-            };
-            reader.readAsDataURL(file);
+            // Increased size limit to 200MB
+            const MAX_SIZE = 200 * 1024 * 1024; // 200MB
+            if (file.size > MAX_SIZE) {
+                showToast('Video size should be less than 200MB. For best performance, use videos under 100MB.', 'error');
+                return;
+            }
+
+            // Show loading feedback
+            showToast('Uploading video...', 'info');
+
+            // Use URL.createObjectURL for large files (better performance than FileReader)
+            const objectUrl = URL.createObjectURL(file);
+            const row = input.closest('.media-input-row');
+            const urlInput = row.querySelector('.product-video-input');
+            urlInput.value = objectUrl;
+            urlInput.dataset.filename = file.name;
+            urlInput.dataset.filesize = file.size;
+            updateMediaPreviews();
+            showToast('Video uploaded successfully!', 'success');
         }
 
         function removeMediaRow(btn) {
