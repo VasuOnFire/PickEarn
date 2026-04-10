@@ -5909,7 +5909,8 @@
                         <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:3rem;color:white;text-shadow:0 2px 8px rgba(0,0,0,0.5);">▶</div>
                     </div>`;
                 } else {
-                    newContent = `<video id="${galleryId}-main" src="${src}" controls style="width:100%;height:100%;object-fit:cover;"></video>`;
+                    // Video with autoplay when clicked
+                    newContent = `<video id="${galleryId}-main" src="${src}" controls autoplay playsinline style="width:100%;height:100%;object-fit:cover;background:var(--bg-primary);"></video>`;
                 }
             }
 
@@ -6234,15 +6235,13 @@
                 return;
             }
 
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const row = input.closest('.media-input-row');
-                const urlInput = row.querySelector('.product-video-input');
-                urlInput.value = e.target.result; // Base64 data URL
-                updateMediaPreviews();
-                showToast('Video uploaded successfully!', 'success');
-            };
-            reader.readAsDataURL(file);
+            const objectUrl = URL.createObjectURL(file);
+            const row = input.closest('.media-input-row');
+            const urlInput = row.querySelector('.product-video-input');
+            urlInput.value = objectUrl;
+            urlInput.dataset.filename = file.name; // Store filename for reference
+            updateMediaPreviews();
+            showToast('Video uploaded successfully!', 'success');
         }
 
         function removeMediaRow(btn) {
