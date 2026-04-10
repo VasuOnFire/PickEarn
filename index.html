@@ -3735,11 +3735,64 @@
                     <div class="search-suggestions" id="searchSuggestions" style="display: none;"></div>
                 </div>
 
+                <!-- Search Filters (Non-Breaking Extension) -->
+                <div id="searchFilters" style="display: none; background: var(--bg-secondary); border-radius: var(--radius-md); padding: 1rem; margin-bottom: 1rem; border: 1px solid var(--border-color);">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; align-items: end;">
+                        <!-- Category Filter -->
+                        <div>
+                            <label style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem; font-weight: 600;">Category</label>
+                            <select id="filterCategory" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-primary); color: var(--text-primary);">
+                                <option value="">All Categories</option>
+                                <option value="electronics">Electronics</option>
+                                <option value="fashion">Fashion</option>
+                                <option value="home">Home & Living</option>
+                                <option value="beauty">Beauty</option>
+                                <option value="sports">Sports</option>
+                                <option value="books">Books</option>
+                                <option value="toys">Toys</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+
+                        <!-- Min Price -->
+                        <div>
+                            <label style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem; font-weight: 600;">Min Price (₹)</label>
+                            <input type="number" id="filterMinPrice" placeholder="0" min="0" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-primary); color: var(--text-primary);">
+                        </div>
+
+                        <!-- Max Price -->
+                        <div>
+                            <label style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem; font-weight: 600;">Max Price (₹)</label>
+                            <input type="number" id="filterMaxPrice" placeholder="50000" min="0" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-primary); color: var(--text-primary);">
+                        </div>
+
+                        <!-- Rating Filter -->
+                        <div>
+                            <label style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem; font-weight: 600;">Rating</label>
+                            <select id="filterRating" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-primary); color: var(--text-primary);">
+                                <option value="">Any Rating</option>
+                                <option value="4">4+ Stars ⭐⭐⭐⭐</option>
+                                <option value="3">3+ Stars ⭐⭐⭐</option>
+                                <option value="2">2+ Stars ⭐⭐</option>
+                            </select>
+                        </div>
+
+                        <!-- Filter Actions -->
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button onclick="applyFilters()" class="btn btn-primary btn-sm" style="flex: 1;">🔍 Apply</button>
+                            <button onclick="resetFilters()" class="btn btn-secondary btn-sm" style="flex: 1;">↩️ Reset</button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Search Results -->
                 <div id="searchResultsContainer" style="display: none;">
                     <div class="section-header" style="margin-top: 1rem;">
                         <h4 class="section-title" id="searchResultsTitle">🔍 Search Results</h4>
-                        <button class="btn btn-secondary btn-sm" onclick="clearSearchResults()">Clear</button>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button class="btn btn-secondary btn-sm" onclick="toggleFilters()">⚙️ Filter</button>
+                            <button class="btn btn-secondary btn-sm" onclick="clearSearchResults()">Clear</button>
+                        </div>
                     </div>
                     <div class="products-grid" id="searchResultsGrid"></div>
                     <div class="empty-state" id="searchResultsEmpty" style="display: none;">
@@ -6926,6 +6979,108 @@
             document.getElementById('searchResultsContainer').style.display = 'none';
             document.getElementById('smartSearchInput').value = '';
             document.getElementById('searchSuggestions').style.display = 'none';
+            document.getElementById('searchFilters').style.display = 'none';
+        }
+
+        // ============================================
+        // SEARCH FILTERING SYSTEM
+        // ============================================
+
+        // Store current filtered results
+        let currentSearchResults = [];
+        let currentSearchQuery = '';
+
+        // Apply filters to search results
+        function applyFilters() {
+            const category = document.getElementById('filterCategory').value;
+            const minPrice = parseFloat(document.getElementById('filterMinPrice').value) || 0;
+            const maxPrice = parseFloat(document.getElementById('filterMaxPrice').value) || Infinity;
+            const minRating = parseFloat(document.getElementById('filterRating').value) || 0;
+
+            // Get base results (either from current search or all products)
+            let baseResults = currentSearchResults.length > 0 ? currentSearchResults : DataManager.getProducts();
+
+            // Apply filters
+            let filtered = baseResults.filter(product => {
+                // Category filter
+                if (category && product.category !== category) {
+                    return false;
+                }
+
+                // Price filter
+                const price = product.price || 0;
+                if (price < minPrice || price > maxPrice) {
+                    return false;
+                }
+
+                // Rating filter
+                const rating = product.rating || 0;
+                if (rating < minRating) {
+                    return false;
+                }
+
+                return true;
+            });
+
+            // Update display
+            displayFilteredResults(filtered);
+            showToast(`🔍 Found ${filtered.length} products matching your filters`, 'success');
+        }
+
+        // Reset all filters
+        function resetFilters() {
+            document.getElementById('filterCategory').value = '';
+            document.getElementById('filterMinPrice').value = '';
+            document.getElementById('filterMaxPrice').value = '';
+            document.getElementById('filterRating').value = '';
+
+            // Restore original search results or show all products
+            if (currentSearchResults.length > 0) {
+                displayFilteredResults(currentSearchResults);
+            } else {
+                const allProducts = DataManager.getProducts();
+                displayFilteredResults(allProducts);
+            }
+
+            showToast('↩️ Filters reset', 'info');
+        }
+
+        // Display filtered results
+        function displayFilteredResults(products) {
+            const container = document.getElementById('searchResultsContainer');
+            const grid = document.getElementById('searchResultsGrid');
+            const empty = document.getElementById('searchResultsEmpty');
+            const titleEl = document.getElementById('searchResultsTitle');
+
+            container.style.display = 'block';
+
+            if (products.length === 0) {
+                grid.innerHTML = '';
+                empty.style.display = 'block';
+                titleEl.textContent = '🔍 Filtered Results (0 found)';
+                return;
+            }
+
+            empty.style.display = 'none';
+            titleEl.textContent = `🔍 Filtered Results (${products.length} found)`;
+            grid.innerHTML = products.map(p => createProductCard(p, false)).join('');
+
+            // Scroll to results
+            container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        // Show/hide filter bar
+        function toggleFilters() {
+            const filterBar = document.getElementById('searchFilters');
+            if (filterBar.style.display === 'none') {
+                filterBar.style.display = 'block';
+                // Initialize current search results if empty
+                if (currentSearchResults.length === 0) {
+                    currentSearchResults = DataManager.getProducts();
+                }
+            } else {
+                filterBar.style.display = 'none';
+            }
         }
 
         // Product Management
