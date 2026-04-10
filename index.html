@@ -6094,35 +6094,175 @@
             displaySearchResults(results, `Results for "${query}"`);
         }
 
+        // ============================================
+        // AI IMAGE FINGERPRINT MATCHING SYSTEM
+        // ============================================
+
+        // Cache for product image fingerprints
+        const productFingerprintCache = new Map();
+
+        // Generate 32x32 grayscale fingerprint from image
+        async function generateImageFingerprint(imageSrc) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = () => {
+                    try {
+                        const canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
+                        canvas.width = 32;
+                        canvas.height = 32;
+                        
+                        // Draw image at small size
+                        ctx.drawImage(img, 0, 0, 32, 32);
+                        
+                        // Get pixel data
+                        const imageData = ctx.getImageData(0, 0, 32, 32);
+                        const data = imageData.data;
+                        
+                        // Convert to grayscale binary fingerprint
+                        const fingerprint = [];
+                        let totalBrightness = 0;
+                        
+                        for (let i = 0; i < data.length; i += 4) {
+                            // Calculate grayscale value
+                            const gray = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+                            totalBrightness += gray;
+                        }
+                        
+                        // Calculate average for binary threshold
+                        const avgBrightness = totalBrightness / (32 * 32);
+                        
+                        // Generate binary fingerprint (0 or 1)
+                        for (let i = 0; i < data.length; i += 4) {
+                            const gray = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+                            fingerprint.push(gray > avgBrightness ? 1 : 0);
+                        }
+                        
+                        resolve(fingerprint);
+                    } catch (error) {
+                        reject(error);
+                    }
+                };
+                img.onerror = () => reject(new Error('Failed to load image'));
+                img.src = imageSrc;
+            });
+        }
+
+        // Compare two fingerprints and return similarity percentage
+        function compareFingerprints(fp1, fp2) {
+            if (!fp1 || !fp2 || fp1.length !== fp2.length) return 0;
+            
+            let matches = 0;
+            for (let i = 0; i < fp1.length; i++) {
+                if (fp1[i] === fp2[i]) matches++;
+            }
+            
+            return Math.round((matches / fp1.length) * 100);
+        }
+
+        // Preprocess product images and cache fingerprints
+        async function preprocessProductImages(products) {
+            const promises = products.map(async (product) => {
+                const images = product.images || [product.image].filter(Boolean);
+                
+                if (images.length === 0) return;
+                
+                try {
+                    // Use first image for fingerprinting
+                    const fingerprint = await generateImageFingerprint(images[0]);
+                    productFingerprintCache.set(product.id, fingerprint);
+                } catch (error) {
+                    console.warn(`Failed to fingerprint product ${product.id}:`, error);
+                }
+            });
+            
+            await Promise.all(promises);
+        }
+
+        // Get best image similarity score between user image and product
+        async function getImageSimilarityScore(userFingerprint, productId) {
+            const productFingerprint = productFingerprintCache.get(productId);
+            if (!productFingerprint || !userFingerprint) return 0;
+            
+            return compareFingerprints(userFingerprint, productFingerprint);
+        }
+
+        // Calculate image-based score boost
+        function calculateImageScoreBoost(similarityPercent) {
+            if (similarityPercent >= 80) return 40; // Strong match
+            if (similarityPercent >= 60) return 25; // Medium match
+            if (similarityPercent >= 40) return 10; // Low match
+            return 0;
+        }
+
         // AI Image Matching System with Product Existence Detection
-        function handleImageSearch(event) {
+        async function handleImageSearch(event) {
             const file = event.target.files[0];
             if (!file) return;
 
             // Show analyzing loader
             showToast('🧠 Analyzing image...', 'info');
 
+            // Generate fingerprint from uploaded image
+            let userFingerprint = null;
+            try {
+                const userImageUrl = URL.createObjectURL(file);
+                userFingerprint = await generateImageFingerprint(userImageUrl);
+                URL.revokeObjectURL(userImageUrl);
+            } catch (error) {
+                console.warn('Failed to generate user image fingerprint:', error);
+            }
+
             const keywords = extractKeywords(file.name);
             const enhancedKeywords = enhanceKeywords(keywords);
             const detectedColor = detectColorFromFilename(file.name);
 
-            // Score-based product matching
+            // Get all products
             const products = DataManager.getProducts();
-            const scoredResults = products.map(p => {
-                const score = calculateMatchScore(p, enhancedKeywords, detectedColor);
-                return { ...p, score };
-            }).filter(p => p.score > 0).sort((a, b) => b.score - a.score);
+            
+            // Preprocess product images (run once per session)
+            if (productFingerprintCache.size === 0 && products.length > 0) {
+                await preprocessProductImages(products);
+            }
+
+            // Score-based product matching with image similarity
+            const scoredResults = [];
+            
+            for (const product of products) {
+                // Calculate existing text-based score
+                const textScore = calculateMatchScore(product, enhancedKeywords, detectedColor);
+                
+                // Calculate image similarity score
+                let imageScore = 0;
+                if (userFingerprint) {
+                    const similarity = await getImageSimilarityScore(userFingerprint, product.id);
+                    imageScore = calculateImageScoreBoost(similarity);
+                }
+                
+                // Hybrid scoring: text score + image score boost
+                const finalScore = Math.min(textScore + imageScore, 100);
+                
+                scoredResults.push({ ...product, score: finalScore, imageSimilarity: imageScore });
+            }
+            
+            // Filter and sort by final score
+            const filteredResults = scoredResults
+                .filter(p => p.score > 0)
+                .sort((a, b) => b.score - a.score);
 
             // Debug logging
             console.log({
+                userFingerprint: userFingerprint ? 'generated' : 'failed',
                 keywords: enhancedKeywords,
                 detectedColor,
-                results: scoredResults.slice(0, 10),
+                topMatch: filteredResults[0] || null,
+                score: filteredResults[0]?.score || 0,
                 timestamp: new Date().toISOString()
             });
 
             // Product existence detection
-            const analysis = checkProductExistence(scoredResults);
+            const analysis = checkProductExistence(filteredResults);
 
             // Debug logging for analysis
             console.log({
