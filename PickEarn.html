@@ -4480,28 +4480,73 @@
         let editingProductId = null;
         let deleteProductId = null;
 
+        // Safe Storage - Works even when localStorage is blocked
+        const SafeStorage = {
+            memory: {},
+            isAvailable: false,
+            init() {
+                try {
+                    localStorage.setItem('test', 'test');
+                    localStorage.removeItem('test');
+                    this.isAvailable = true;
+                } catch (e) {
+                    this.isAvailable = false;
+                    console.log('localStorage blocked - using memory storage');
+                }
+            },
+            getItem(key) {
+                if (this.isAvailable) {
+                    try {
+                        return localStorage.getItem(key);
+                    } catch (e) {
+                        return this.memory[key] || null;
+                    }
+                }
+                return this.memory[key] || null;
+            },
+            setItem(key, value) {
+                if (this.isAvailable) {
+                    try {
+                        localStorage.setItem(key, value);
+                        return;
+                    } catch (e) {}
+                }
+                this.memory[key] = value;
+            },
+            removeItem(key) {
+                if (this.isAvailable) {
+                    try {
+                        localStorage.removeItem(key);
+                        return;
+                    } catch (e) {}
+                }
+                delete this.memory[key];
+            }
+        };
+        SafeStorage.init();
+
         // Data Manager
         const DataManager = {
-            getUsers() { return JSON.parse(localStorage.getItem('pickearn_users') || '[]'); },
-            saveUsers(users) { localStorage.setItem('pickearn_users', JSON.stringify(users)); },
-            getProducts() { return JSON.parse(localStorage.getItem('pickearn_products') || '[]'); },
-            saveProducts(products) { localStorage.setItem('pickearn_products', JSON.stringify(products)); },
-            getSession() { return JSON.parse(localStorage.getItem('pickearn_session') || 'null'); },
-            saveSession(session) { localStorage.setItem('pickearn_session', JSON.stringify(session)); },
-            clearSession() { localStorage.removeItem('pickearn_session'); },
+            getUsers() { return JSON.parse(SafeStorage.getItem('pickearn_users') || '[]'); },
+            saveUsers(users) { SafeStorage.setItem('pickearn_users', JSON.stringify(users)); },
+            getProducts() { return JSON.parse(SafeStorage.getItem('pickearn_products') || '[]'); },
+            saveProducts(products) { SafeStorage.setItem('pickearn_products', JSON.stringify(products)); },
+            getSession() { return JSON.parse(SafeStorage.getItem('pickearn_session') || 'null'); },
+            saveSession(session) { SafeStorage.setItem('pickearn_session', JSON.stringify(session)); },
+            clearSession() { SafeStorage.removeItem('pickearn_session'); },
             getUserPurchases(userId) {
-                const all = JSON.parse(localStorage.getItem('pickearn_purchases') || '[]');
+                const all = JSON.parse(SafeStorage.getItem('pickearn_purchases') || '[]');
                 return all.filter(p => p.userId === userId);
             },
             addPurchase(userId, productId, productName) {
-                const all = JSON.parse(localStorage.getItem('pickearn_purchases') || '[]');
+                const all = JSON.parse(SafeStorage.getItem('pickearn_purchases') || '[]');
                 all.push({ userId, productId, productName, date: new Date().toISOString() });
-                localStorage.setItem('pickearn_purchases', JSON.stringify(all));
+                SafeStorage.setItem('pickearn_purchases', JSON.stringify(all));
             },
-            getAllPurchases() { return JSON.parse(localStorage.getItem('pickearn_purchases') || '[]'); },
+            getAllPurchases() { return JSON.parse(SafeStorage.getItem('pickearn_purchases') || '[]'); },
             // Invoice Submissions
-            getSubmissions() { return JSON.parse(localStorage.getItem('pickearn_submissions') || '[]'); },
-            saveSubmissions(submissions) { localStorage.setItem('pickearn_submissions', JSON.stringify(submissions)); },
+            getSubmissions() { return JSON.parse(SafeStorage.getItem('pickearn_submissions') || '[]'); },
+            saveSubmissions(submissions) { SafeStorage.setItem('pickearn_submissions', JSON.stringify(submissions)); },
             getUserSubmissions(userId) {
                 const all = this.getSubmissions();
                 return all.filter(s => s.userId === userId);
@@ -4528,13 +4573,13 @@
             },
             // Wallet
             getWallet(userId) {
-                const wallets = JSON.parse(localStorage.getItem('pickearn_wallets') || '{}');
+                const wallets = JSON.parse(SafeStorage.getItem('pickearn_wallets') || '{}');
                 return wallets[userId] || { confirmed: 0, pending: 0, totalEarned: 0 };
             },
             saveWallet(userId, wallet) {
-                const wallets = JSON.parse(localStorage.getItem('pickearn_wallets') || '{}');
+                const wallets = JSON.parse(SafeStorage.getItem('pickearn_wallets') || '{}');
                 wallets[userId] = wallet;
-                localStorage.setItem('pickearn_wallets', JSON.stringify(wallets));
+                SafeStorage.setItem('pickearn_wallets', JSON.stringify(wallets));
             },
             addPendingCoins(userId, amount) {
                 const wallet = this.getWallet(userId);
@@ -4555,13 +4600,13 @@
             },
             // User Activity Tracking
             getUserActivity(userId) {
-                const activity = JSON.parse(localStorage.getItem('pickearn_activity') || '{}');
+                const activity = JSON.parse(SafeStorage.getItem('pickearn_activity') || '{}');
                 return activity[userId] || { submissions: [], dailyCounts: {} };
             },
             saveUserActivity(userId, activity) {
-                const all = JSON.parse(localStorage.getItem('pickearn_activity') || '{}');
+                const all = JSON.parse(SafeStorage.getItem('pickearn_activity') || '{}');
                 all[userId] = activity;
-                localStorage.setItem('pickearn_activity', JSON.stringify(all));
+                SafeStorage.setItem('pickearn_activity', JSON.stringify(all));
             },
             logUserActivity(userId, action) {
                 const activity = this.getUserActivity(userId);
@@ -4572,42 +4617,43 @@
             },
             // User Profile Management
             getUserProfile(userId) {
-                const profiles = JSON.parse(localStorage.getItem('pickearn_profiles') || '{}');
+                const profiles = JSON.parse(SafeStorage.getItem('pickearn_profiles') || '{}');
                 return profiles[userId] || {
                     phone: '',
                     location: '',
-                    gender: '',
-                    dob: '',
-                    profileImage: null,
-                    memberSince: new Date().getFullYear()
+                    bio: '',
+                    avatar: '',
+                    social: { twitter: '', instagram: '', linkedin: '' },
+                    notifications: { email: true, browser: true, mobile: false },
+                    privacy: { showWallet: true, showHistory: true }
                 };
             },
             saveUserProfile(userId, updates) {
-                const profiles = JSON.parse(localStorage.getItem('pickearn_profiles') || '{}');
+                const profiles = JSON.parse(SafeStorage.getItem('pickearn_profiles') || '{}');
                 const existing = profiles[userId] || {};
                 profiles[userId] = { ...existing, ...updates };
-                localStorage.setItem('pickearn_profiles', JSON.stringify(profiles));
+                SafeStorage.setItem('pickearn_profiles', JSON.stringify(profiles));
             },
             // Reset User Data
             resetUserData(userId) {
                 this.saveWallet(userId, { confirmed: 0, pending: 0, totalEarned: 0 });
                 const submissions = this.getSubmissions().filter(s => s.userId !== userId);
                 this.saveSubmissions(submissions);
-                const activity = JSON.parse(localStorage.getItem('pickearn_activity') || '{}');
+                const activity = JSON.parse(SafeStorage.getItem('pickearn_activity') || '{}');
                 delete activity[userId];
-                localStorage.setItem('pickearn_activity', JSON.stringify(activity));
-                const purchases = JSON.parse(localStorage.getItem('pickearn_purchases') || '[]');
-                localStorage.setItem('pickearn_purchases', JSON.stringify(purchases.filter(p => p.userId !== userId)));
+                SafeStorage.setItem('pickearn_activity', JSON.stringify(activity));
+                const purchases = JSON.parse(SafeStorage.getItem('pickearn_purchases') || '[]');
+                SafeStorage.setItem('pickearn_purchases', JSON.stringify(purchases.filter(p => p.userId !== userId)));
             },
             getProductClicks() {
-                return JSON.parse(localStorage.getItem('pickearn_clicks') || '{}');
+                return JSON.parse(SafeStorage.getItem('pickearn_clicks') || '{}');
             },
             // Withdrawal Management
             getWithdrawals() {
-                return JSON.parse(localStorage.getItem('pickearn_withdrawals') || '[]');
+                return JSON.parse(SafeStorage.getItem('pickearn_withdrawals') || '[]');
             },
             saveWithdrawals(withdrawals) {
-                localStorage.setItem('pickearn_withdrawals', JSON.stringify(withdrawals));
+                SafeStorage.setItem('pickearn_withdrawals', JSON.stringify(withdrawals));
             },
             getUserWithdrawals(userId) {
                 return this.getWithdrawals().filter(w => w.userId === userId);
@@ -4642,10 +4688,10 @@
 
             // Invoice Fraud Detection System
             getVerifiedInvoices() {
-                return JSON.parse(localStorage.getItem('pickearn_verified_invoices') || '[]');
+                return JSON.parse(SafeStorage.getItem('pickearn_verified_invoices') || '[]');
             },
             saveVerifiedInvoices(invoices) {
-                localStorage.setItem('pickearn_verified_invoices', JSON.stringify(invoices));
+                SafeStorage.setItem('pickearn_verified_invoices', JSON.stringify(invoices));
             },
 
             // Generate unique file hash for duplicate detection
@@ -4684,10 +4730,10 @@
 
             // Get all invoice submissions for admin
             getInvoiceSubmissions() {
-                return JSON.parse(localStorage.getItem('pickearn_invoice_submissions') || '[]');
+                return JSON.parse(SafeStorage.getItem('pickearn_invoice_submissions') || '[]');
             },
             saveInvoiceSubmissions(submissions) {
-                localStorage.setItem('pickearn_invoice_submissions', JSON.stringify(submissions));
+                SafeStorage.setItem('pickearn_invoice_submissions', JSON.stringify(submissions));
             },
             addInvoiceSubmission(submission) {
                 const all = this.getInvoiceSubmissions();
@@ -4722,10 +4768,10 @@
 
             // 1. CLICK TRACKING SYSTEM
             getProductClicks() {
-                return JSON.parse(localStorage.getItem('pickearn_product_clicks') || '[]');
+                return JSON.parse(SafeStorage.getItem('pickearn_product_clicks') || '[]');
             },
             saveProductClicks(clicks) {
-                localStorage.setItem('pickearn_product_clicks', JSON.stringify(clicks));
+                SafeStorage.setItem('pickearn_product_clicks', JSON.stringify(clicks));
             },
             recordProductClick(userId, productId, productName) {
                 const clicks = this.getProductClicks();
@@ -4765,18 +4811,18 @@
 
             // 3. USER BEHAVIOR ANALYSIS
             getUserActivityLog(userId) {
-                const logs = JSON.parse(localStorage.getItem('pickearn_activity_logs') || '{}');
+                const logs = JSON.parse(SafeStorage.getItem('pickearn_activity_logs') || '{}');
                 return logs[userId] || [];
             },
             addUserActivity(userId, activity) {
-                const logs = JSON.parse(localStorage.getItem('pickearn_activity_logs') || '{}');
+                const logs = JSON.parse(SafeStorage.getItem('pickearn_activity_logs') || '{}');
                 if (!logs[userId]) logs[userId] = [];
                 logs[userId].push({
                     ...activity,
                     timestamp: new Date().toISOString(),
                     timestampMs: Date.now()
                 });
-                localStorage.setItem('pickearn_activity_logs', JSON.stringify(logs));
+                SafeStorage.setItem('pickearn_activity_logs', JSON.stringify(logs));
             },
             getUserDailyClaimCount(userId, date = new Date().toDateString()) {
                 const logs = this.getUserActivityLog(userId);
@@ -4921,42 +4967,54 @@
                 return sessionId;
             },
             storeDeviceInfo(userId) {
-                const devices = JSON.parse(localStorage.getItem('pickearn_user_devices') || '{}');
+                const devices = JSON.parse(SafeStorage.getItem('pickearn_user_devices') || '{}');
                 const deviceId = this.getDeviceFingerprint();
                 const sessionId = this.getOrCreateSessionId();
 
-                if (!devices[userId]) devices[userId] = [];
-                const existing = devices[userId].find(d => d.deviceId === deviceId);
+                if (!devices[userId]) {
+                    devices[userId] = [];
+                }
 
+                const existing = devices[userId].find(d => d.deviceId === deviceId);
                 if (!existing) {
                     devices[userId].push({
                         deviceId,
                         firstSeen: new Date().toISOString(),
                         sessions: [sessionId]
                     });
-                } else if (!existing.sessions.includes(sessionId)) {
-                    existing.sessions.push(sessionId);
+                } else {
+                    existing.lastSeen = new Date().toISOString();
+                    if (!existing.sessions.includes(sessionId)) {
+                        existing.sessions.push(sessionId);
+                    }
                 }
 
-                localStorage.setItem('pickearn_user_devices', JSON.stringify(devices));
+                SafeStorage.setItem('pickearn_user_devices', JSON.stringify(devices));
                 return { deviceId, sessionId };
             },
             checkDeviceAbuse(userId) {
-                const devices = JSON.parse(localStorage.getItem('pickearn_user_devices') || '{}');
+                const devices = JSON.parse(SafeStorage.getItem('pickearn_user_devices') || '{}');
                 const userDevices = devices[userId] || [];
 
                 // Check if multiple accounts on same device
-                const allDevices = Object.entries(devices);
-                const deviceId = this.getDeviceFingerprint();
-                const sharedAccounts = allDevices.filter(([uid, devs]) =>
-                    uid !== userId && devs.some(d => d.deviceId === deviceId)
-                );
+                const allUserIds = Object.keys(devices);
+                const sharedAccounts = [];
+                
+                for (const otherUserId of allUserIds) {
+                    if (otherUserId !== userId) {
+                        const otherDevices = devices[otherUserId] || [];
+                        for (const device of userDevices) {
+                            if (otherDevices.some(d => d.deviceId === device.deviceId)) {
+                                sharedAccounts.push(otherUserId);
+                            }
+                        }
+                    }
+                }
 
                 return {
-                    isAbnormal: userDevices.length > 3 || sharedAccounts.length > 0,
-                    deviceCount: userDevices.length,
-                    sharedAccounts: sharedAccounts.map(([uid]) => uid),
-                    hasMultipleAccounts: sharedAccounts.length > 0
+                    hasMultipleAccounts: sharedAccounts.length > 0,
+                    sharedAccounts,
+                    deviceCount: userDevices.length
                 };
             },
 
@@ -5135,7 +5193,7 @@
             }, { once: true });
 
             // Theme
-            const savedTheme = localStorage.getItem('pickearn_theme') || 'dark';
+            const savedTheme = SafeStorage.getItem('pickearn_theme') || 'dark';
             document.documentElement.setAttribute('data-theme', savedTheme);
             document.getElementById('userThemeToggle')?.addEventListener('click', toggleTheme);
             document.getElementById('adminThemeToggle')?.addEventListener('click', toggleTheme);
@@ -6360,9 +6418,9 @@
 
         // Track product clicks
         function trackProductClick(productId) {
-            const clicks = JSON.parse(localStorage.getItem('pickearn_clicks') || '{}');
+            const clicks = JSON.parse(SafeStorage.getItem('pickearn_clicks') || '{}');
             clicks[productId] = (clicks[productId] || 0) + 1;
-            localStorage.setItem('pickearn_clicks', JSON.stringify(clicks));
+            SafeStorage.setItem('pickearn_clicks', JSON.stringify(clicks));
         }
 
         // Theme
@@ -6370,7 +6428,7 @@
             const current = document.documentElement.getAttribute('data-theme');
             const next = current === 'light' ? 'dark' : 'light';
             document.documentElement.setAttribute('data-theme', next);
-            localStorage.setItem('pickearn_theme', next);
+            SafeStorage.setItem('pickearn_theme', next);
         }
 
         // AI Verification Engine
@@ -7913,6 +7971,12 @@
 
         // Standalone Toast - Works in any app without dependencies
         function showToast(message, type = 'info') {
+            // Wait for DOM to be ready
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', () => showToast(message, type));
+                return;
+            }
+
             const icons = { success: '✅', error: '❌', info: 'ℹ️', warning: '⚠️' };
             const colors = {
                 success: { bg: '#10b981', border: '#059669' },
@@ -7921,6 +7985,24 @@
                 warning: { bg: '#f59e0b', border: '#d97706' }
             };
 
+            // Inject styles if not present
+            if (!document.getElementById('toastStyles')) {
+                const style = document.createElement('style');
+                style.id = 'toastStyles';
+                style.textContent = `
+                    @keyframes toastSlideIn {
+                        from { transform: translateX(100%); opacity: 0; }
+                        to { transform: translateX(0); opacity: 1; }
+                    }
+                    @keyframes toastSlideOut {
+                        from { transform: translateX(0); opacity: 1; }
+                        to { transform: translateX(100%); opacity: 0; }
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+
+            // Create or get container
             let container = document.getElementById('toastContainer');
             if (!container) {
                 container = document.createElement('div');
@@ -7980,32 +8062,6 @@
                     setTimeout(() => toast.remove(), 300);
                 }
             }, 3000);
-        }
-
-        // Inject toast animations safely
-        function injectToastStyles() {
-            if (!document.getElementById('toastStyles')) {
-                const style = document.createElement('style');
-                style.id = 'toastStyles';
-                style.textContent = `
-                    @keyframes toastSlideIn {
-                        from { transform: translateX(100%); opacity: 0; }
-                        to { transform: translateX(0); opacity: 1; }
-                    }
-                    @keyframes toastSlideOut {
-                        from { transform: translateX(0); opacity: 1; }
-                        to { transform: translateX(100%); opacity: 0; }
-                    }
-                `;
-                document.head.appendChild(style);
-            }
-        }
-
-        // Inject styles when DOM is ready
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', injectToastStyles);
-        } else {
-            injectToastStyles();
         }
     </script>
 </body>
