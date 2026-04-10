@@ -5713,15 +5713,11 @@
         }
 
         function generateStars(rating) {
-            const rounded = Math.round(rating * 4) / 4;
+            const rounded = Math.round(rating);
             let stars = '';
             for (let i = 1; i <= 5; i++) {
-                if (rounded >= i) {
+                if (i <= rounded) {
                     stars += '⭐';
-                } else if (rounded >= i - 0.25) {
-                    stars += '◐';
-                } else if (rounded >= i - 0.5) {
-                    stars += '◔';
                 } else {
                     stars += '☆';
                 }
