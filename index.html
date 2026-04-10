@@ -5818,10 +5818,15 @@
                 </div>
             ` : '';
 
+            // Get smart tag (safe, non-breaking)
+            const tag = getProductTag(product.id);
+            const tagBadge = tag ? `<div style="display: inline-block; padding: 0.25rem 0.5rem; background: var(--primary); color: white; border-radius: var(--radius-sm); font-size: 0.75rem; font-weight: 600; margin-bottom: 0.5rem;">${tag}</div>` : '';
+
             return `
                 <div class="product-card">
                     <div class="product-media" style="cursor: ${hasMultipleMedia ? 'pointer' : 'default'};">${mediaGallery}</div>
                     <div class="product-content">
+                        ${tagBadge}
                         <h3 class="product-title">${product.name}</h3>
                         ${priceTag}
                         <p class="product-description">${product.description}</p>
@@ -5968,9 +5973,85 @@
             document.body.appendChild(modal);
         }
 
+        // ============================================
+        // SELF-LEARNING PRODUCT RANKING SYSTEM
+        // ============================================
+
+        // Safe storage handler for product stats
+        function getStats() {
+            try {
+                return JSON.parse(localStorage.getItem("productStats")) || {};
+            } catch {
+                return {};
+            }
+        }
+
+        function saveStats(data) {
+            localStorage.setItem("productStats", JSON.stringify(data));
+        }
+
+        // Track user click on product
+        function trackProductClick(productId) {
+            let data = getStats();
+
+            if (!data[productId]) {
+                data[productId] = { clicks: 0, purchases: 0 };
+            }
+
+            data[productId].clicks += 1;
+            saveStats(data);
+        }
+
+        // Track purchase
+        function trackPurchase(productId) {
+            let data = getStats();
+
+            if (!data[productId]) {
+                data[productId] = { clicks: 0, purchases: 0 };
+            }
+
+            data[productId].purchases += 1;
+            saveStats(data);
+        }
+
+        // Smart tag system based on stats
+        function getProductTag(productId) {
+            let stats = getStats()[productId];
+
+            if (!stats) return "";
+
+            if (stats.purchases >= 5) return "🔥 Best Product";
+            if (stats.purchases >= 2) return "🛒 Most Bought";
+            if (stats.clicks >= 10) return "📈 Trending";
+            if (stats.clicks >= 5) return "⭐ Recommended";
+
+            return "";
+        }
+
+        // Behavior score boost for ranking
+        function getBehaviorScore(productId) {
+            let stats = getStats()[productId];
+
+            if (!stats) return 0;
+
+            return (stats.clicks * 2) + (stats.purchases * 6);
+        }
+
+        // Trending boost for recently active products
+        function getTrendingBoost(productId) {
+            let stats = getStats()[productId];
+
+            if (!stats) return 0;
+
+            return stats.clicks > 3 ? 10 : 0;
+        }
+
         function buyProduct(productId, productName, affiliateLink) {
             // Track click for analytics
             trackProductClick(productId);
+
+            // Track purchase for self-learning system
+            trackPurchase(productId);
 
             // Record click for anti-fraud system
             if (currentUser) {
