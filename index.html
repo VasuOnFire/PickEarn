@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PickEarn</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, -apple-system, sans-serif; background: #0b0f1a; color: #fff; min-height: 100vh; }
+        
+        /* Splash Screen */
+        .splash { position: fixed; inset: 0; background: linear-gradient(135deg, #0f0f1a, #1a1a2e); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .splash-content { text-align: center; }
+        .splash h1 { font-size: 3rem; background: linear-gradient(135deg, #3b82f6, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .splash p { color: #8b92a8; margin: 1rem 0; }
+        .splash button { background: linear-gradient(135deg, #3b82f6, #8b5cf6); border: none; padding: 1rem 2rem; border-radius: 50px; color: white; font-size: 1rem; cursor: pointer; }
+        
+        /* Auth */
+        .auth-container { max-width: 400px; margin: 50px auto; padding: 2rem; background: #12182b; border-radius: 16px; }
+        .auth-container h2 { text-align: center; margin-bottom: 1.5rem; }
+        .form-group { margin-bottom: 1rem; }
+        .form-group label { display: block; margin-bottom: 0.5rem; color: #8b92a8; font-size: 0.875rem; }
+        .form-group input { width: 100%; padding: 0.75rem; background: #0b0f1a; border: 1px solid rgba(139,146,168,0.2); border-radius: 8px; color: #fff; }
+        .btn { width: 100%; padding: 0.75rem; background: linear-gradient(135deg, #9b5cff, #00d4ff); border: none; border-radius: 8px; color: #fff; font-weight: 600; cursor: pointer; margin-top: 1rem; }
+        .link { text-align: center; margin-top: 1rem; color: #00d4ff; cursor: pointer; }
+        
+        /* App */
+        .app { display: none; max-width: 1200px; margin: 0 auto; padding: 1rem; }
+        .header { display: flex; justify-content: space-between; align-items: center; padding: 1rem; background: #12182b; border-radius: 12px; margin-bottom: 1rem; }
+        .header h1 { font-size: 1.5rem; background: linear-gradient(135deg, #3b82f6, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .wallet { background: linear-gradient(135deg, #9b5cff, #00d4ff); padding: 1.5rem; border-radius: 16px; margin-bottom: 1rem; }
+        .wallet h3 { font-size: 0.875rem; opacity: 0.8; margin-bottom: 0.5rem; }
+        .wallet .coins { font-size: 2.5rem; font-weight: 700; }
+        
+        /* Products */
+        .products { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+        .product-card { background: #12182b; border-radius: 16px; overflow: hidden; border: 1px solid rgba(139,146,168,0.1); }
+        .product-card img { width: 100%; height: 200px; object-fit: cover; }
+        .product-info { padding: 1rem; }
+        .product-info h3 { font-size: 1.1rem; margin-bottom: 0.5rem; }
+        .product-info p { color: #8b92a8; font-size: 0.875rem; margin-bottom: 0.5rem; }
+        .price { color: #10b981; font-weight: 600; font-size: 1.25rem; }
+        .btn-buy { width: 100%; padding: 0.75rem; background: linear-gradient(135deg, #10b981, #059669); border: none; border-radius: 8px; color: #fff; font-weight: 600; cursor: pointer; margin-top: 0.5rem; }
+        
+        /* Invoice Form */
+        .invoice-section { background: #12182b; padding: 1.5rem; border-radius: 16px; margin-top: 1rem; }
+        .invoice-section h2 { margin-bottom: 1rem; }
+        
+        /* Toast */
+        .toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; }
+        .toast { display: flex; align-items: center; gap: 12px; padding: 16px 20px; background: white; border-left: 4px solid; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); animation: slideIn 0.3s ease; color: #1f2937; }
+        .toast.success { border-color: #10b981; }
+        .toast.error { border-color: #ef4444; }
+        .toast.info { border-color: #3b82f6; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    </style>
+</head>
+<body>
+    <div class="toast-container" id="toastContainer"></div>
+    
+    <!-- Splash Screen -->
+    <div class="splash" id="splash">
+        <div class="splash-content">
+            <h1>PickEarn</h1>
+            <p>Pick Products. Earn Rewards.</p>
+            <button onclick="enterApp()">Tap to Enter</button>
+        </div>
+    </div>
+
+    <!-- Auth -->
+    <div class="auth-container" id="authContainer" style="display:none;">
+        <div id="loginForm">
+            <h2>Welcome Back</h2>
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="loginEmail" placeholder="your@email.com">
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="loginPassword" placeholder="••••••••">
+            </div>
+            <button class="btn" onclick="handleLogin()">Login</button>
+            <p class="link" onclick="showSignup()">Don't have an account? Sign up</p>
+        </div>
+        <div id="signupForm" style="display:none;">
+            <h2>Create Account</h2>
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" id="signupUsername" placeholder="username">
+            </div>
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="signupEmail" placeholder="your@email.com">
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="signupPassword" placeholder="••••••••">
+            </div>
+            <button class="btn" onclick="handleSignup()">Sign Up</button>
+            <p class="link" onclick="showLogin()">Already have an account? Login</p>
+        </div>
+    </div>
+
+    <!-- App -->
+    <div class="app" id="app">
+        <div class="header">
+            <h1>PickEarn</h1>
+            <button class="btn" style="width:auto; padding:0.5rem 1rem;" onclick="logout()">Logout</button>
+        </div>
+        
+        <div class="wallet">
+            <h3>Your Coins</h3>
+            <div class="coins" id="coinDisplay">0</div>
+        </div>
+
+        <h2 style="margin: 1rem 0;">Products</h2>
+        <div class="products" id="products"></div>
+
+        <div class="invoice-section">
+            <h2>Submit Invoice</h2>
+            <div class="form-group">
+                <label>Product Name</label>
+                <input type="text" id="invoiceProduct" placeholder="Enter product name">
+            </div>
+            <div class="form-group">
+                <label>Order ID</label>
+                <input type="text" id="invoiceOrderId" placeholder="Enter order ID">
+            </div>
+            <div class="form-group">
+                <label>Amount (₹)</label>
+                <input type="number" id="invoiceAmount" placeholder="Enter amount">
+            </div>
+            <button class="btn" onclick="submitInvoice()">Submit for Verification</button>
+        </div>
+    </div>
+
+    <script>
+        // Safe Storage - Memory only for restricted platforms
+        const SafeStorage = {
+            memory: {},
+            getItem(key) { return this.memory[key] || null; },
+            setItem(key, value) { this.memory[key] = value; },
+            removeItem(key) { delete this.memory[key]; }
+        };
+
+        // Data
+        let currentUser = null;
+        let users = [{ id: '1', username: 'admin', email: 'admin@test.com', password: 'admin123', role: 'admin', coins: 1000 }];
+        let products = [
+            { id: 1, name: 'Wireless Earbuds', price: 1299, image: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=400', desc: 'Premium sound quality' },
+            { id: 2, name: 'Smart Watch', price: 2499, image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400', desc: 'Track your fitness' },
+            { id: 3, name: 'Bluetooth Speaker', price: 1999, image: 'https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?w=400', desc: '360° surround sound' },
+            { id: 4, name: 'Power Bank', price: 899, image: 'https://images.unsplash.com/photo-1609091839311-d5365f9ff1c5?w=400', desc: '20000mAh capacity' }
+        ];
+        let invoices = [];
+
+        // Splash
+        function enterApp() {
+            document.getElementById('splash').style.display = 'none';
+            document.getElementById('authContainer').style.display = 'block';
+        }
+
+        // Auth
+        function showSignup() {
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('signupForm').style.display = 'block';
+        }
+
+        function showLogin() {
+            document.getElementById('signupForm').style.display = 'none';
+            document.getElementById('loginForm').style.display = 'block';
+        }
+
+        function handleLogin() {
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            const user = users.find(u => u.email === email && u.password === password);
+            if (user) {
+                currentUser = user;
+                showApp();
+                showToast('Welcome back!', 'success');
+            } else {
+                showToast('Invalid credentials', 'error');
+            }
+        }
+
+        function handleSignup() {
+            const username = document.getElementById('signupUsername').value;
+            const email = document.getElementById('signupEmail').value;
+            const password = document.getElementById('signupPassword').value;
+            if (users.find(u => u.email === email)) {
+                showToast('Email already exists', 'error');
+                return;
+            }
+            const newUser = { id: Date.now().toString(), username, email, password, role: 'user', coins: 0 };
+            users.push(newUser);
+            currentUser = newUser;
+            showApp();
+            showToast('Account created!', 'success');
+        }
+
+        function logout() {
+            currentUser = null;
+            document.getElementById('app').style.display = 'none';
+            document.getElementById('authContainer').style.display = 'block';
+            showLogin();
+        }
+
+        function showApp() {
+            document.getElementById('authContainer').style.display = 'none';
+            document.getElementById('app').style.display = 'block';
+            updateWallet();
+            renderProducts();
+        }
+
+        function updateWallet() {
+            document.getElementById('coinDisplay').textContent = currentUser?.coins || 0;
+        }
+
+        function renderProducts() {
+            document.getElementById('products').innerHTML = products.map(p => `
+                <div class="product-card">
+                    <img src="${p.image}" alt="${p.name}">
+                    <div class="product-info">
+                        <h3>${p.name}</h3>
+                        <p>${p.desc}</p>
+                        <div class="price">₹${p.price}</div>
+                        <button class="btn-buy" onclick="buyProduct(${p.id})">Buy Now</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function buyProduct(id) {
+            const product = products.find(p => p.id === id);
+            window.open(`https://www.amazon.in/s?k=${encodeURIComponent(product.name)}`, '_blank');
+            showToast(`Opening ${product.name}...`, 'info');
+        }
+
+        function submitInvoice() {
+            const productName = document.getElementById('invoiceProduct').value;
+            const orderId = document.getElementById('invoiceOrderId').value;
+            const amount = parseFloat(document.getElementById('invoiceAmount').value);
+            
+            if (!productName || !orderId || !amount) {
+                showToast('Please fill all fields', 'error');
+                return;
+            }
+
+            const coins = Math.floor(amount / 10);
+            invoices.push({ id: Date.now(), userId: currentUser.id, productName, orderId, amount, coins, status: 'pending' });
+            
+            currentUser.coins += coins;
+            updateWallet();
+            
+            document.getElementById('invoiceProduct').value = '';
+            document.getElementById('invoiceOrderId').value = '';
+            document.getElementById('invoiceAmount').value = '';
+            
+            showToast(`+${coins} coins added! Pending verification.`, 'success');
+        }
+
+        // Toast
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `
+                <span style="font-size: 20px;">${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span>
+                <div>${message}</div>
+            `;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        // Auto-enter after 2 seconds
+        setTimeout(() => {
+            if (document.getElementById('splash').style.display !== 'none') {
+                enterApp();
+            }
+        }, 2000);
+    </script>
+</body>
+</html>
