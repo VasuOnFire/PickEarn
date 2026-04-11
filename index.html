@@ -7527,16 +7527,26 @@
             const allProducts = DataManager.getProducts();
             const productToDelete = allProducts.find(p => p.id === deleteProductId);
 
-            // Delete from localStorage
-            const products = allProducts.filter(p => p.id !== deleteProductId);
-            DataManager.saveProducts(products);
+            // Delete from localStorage (local admin products)
+            const localProducts = JSON.parse(SafeStorage.getItem('pickearn_products') || '[]');
+            const filteredLocal = localProducts.filter(p => p.id !== deleteProductId);
+            SafeStorage.setItem('pickearn_products', JSON.stringify(filteredLocal));
 
-            // Also delete from Firebase if it has a firebaseId (non-blocking)
+            // Delete from Firebase cache (if product came from Firebase)
+            const firebaseProducts = JSON.parse(SafeStorage.getItem('pickearn_firebase_products') || '[]');
+            const filteredFirebase = firebaseProducts.filter(p => p.id !== deleteProductId);
+            SafeStorage.setItem('pickearn_firebase_products', JSON.stringify(filteredFirebase));
+
+            // Also delete from Firebase cloud if it has a firebaseId (non-blocking)
             if (window.FirebaseSync && window.FirebaseSync.enabled && productToDelete && productToDelete.firebaseId) {
                 window.FirebaseSync.deleteProduct(productToDelete.firebaseId).catch(e => {
                     console.log("Firebase delete failed (offline?):", e);
                 });
             }
+
+            console.log('Deleted product:', deleteProductId);
+            console.log('Local products after delete:', filteredLocal.length);
+            console.log('Firebase products after delete:', filteredFirebase.length);
 
             deleteProductId = null;
             closeDeleteModal();
