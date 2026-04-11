@@ -4757,7 +4757,12 @@
                 // Filter out duplicates (local takes priority over Firebase)
                 const uniqueFirebase = firebaseWithSource.filter(p => !localIds.has(p.id));
                 const allRemoteIds = new Set([...localIds, ...firebaseIds]);
-                const uniqueShared = sharedWithSource.filter(p => !allRemoteIds.has(p.id));
+
+                // Filter out deleted shared products (admin deleted them)
+                const deletedShared = JSON.parse(SafeStorage.getItem('pickearn_deleted_shared') || '[]');
+                const uniqueShared = sharedWithSource.filter(p =>
+                    !allRemoteIds.has(p.id) && !deletedShared.includes(p.id)
+                );
 
                 return [...uniqueShared, ...uniqueFirebase, ...localWithSource];
             },
@@ -7564,6 +7569,16 @@
             const firebaseProducts = JSON.parse(SafeStorage.getItem('pickearn_firebase_products') || '[]');
             const filteredFirebase = firebaseProducts.filter(p => p.id !== deleteProductId);
             SafeStorage.setItem('pickearn_firebase_products', JSON.stringify(filteredFirebase));
+
+            // Track deleted shared products to prevent them from reappearing
+            if (productToDelete && productToDelete.source === 'shared') {
+                const deletedShared = JSON.parse(SafeStorage.getItem('pickearn_deleted_shared') || '[]');
+                if (!deletedShared.includes(deleteProductId)) {
+                    deletedShared.push(deleteProductId);
+                    SafeStorage.setItem('pickearn_deleted_shared', JSON.stringify(deletedShared));
+                    console.log('Tracked deleted shared product:', deleteProductId);
+                }
+            }
 
             // Also delete from Firebase cloud if it has a firebaseId (non-blocking)
             if (window.FirebaseSync && window.FirebaseSync.enabled && productToDelete && productToDelete.firebaseId) {
