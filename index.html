@@ -7702,6 +7702,13 @@
 
             const newStatus = !currentStatus; // Toggle the status
 
+            // Update in ALL_PRODUCTS array
+            const productIndex = ALL_PRODUCTS.findIndex(p => p.id === productId);
+            if (productIndex !== -1) {
+                ALL_PRODUCTS[productIndex].isPublished = newStatus;
+                ALL_PRODUCTS[productIndex].updatedAt = Date.now();
+            }
+
             // Update in Firebase if available
             if (window.FirebaseSync && window.FirebaseSync.enabled && product.firebaseId) {
                 try {
@@ -7725,7 +7732,61 @@
                     showToast(newStatus ? '🚀 Product published!' : '📋 Product unpublished!', 'success');
                 }
             }
+
+            // Reload admin panel and user view
+            loadAdminPanel();
+            renderProducts(ALL_PRODUCTS.filter(p => p.isPublished));
         }
+
+        // Generate 10,000 demo products
+        const ALL_PRODUCTS = [];
+
+        function generateDemoProducts() {
+            // Check if already generated
+            if (ALL_PRODUCTS.length > 0) {
+                console.log('Demo products already generated:', ALL_PRODUCTS.length);
+                return;
+            }
+
+            console.log('Generating 10,000 demo products...');
+
+            for (let i = 1; i <= 10000; i++) {
+                ALL_PRODUCTS.push({
+                    id: "demo_" + i,
+                    name: "Demo Product " + i,
+                    description: "This is demo product " + i + ". High quality item with excellent features and great value for money.",
+                    price: Math.floor(Math.random() * 2000) + 1,
+                    rating: parseFloat((Math.random() * 5).toFixed(1)),
+                    images: [],
+                    videos: [],
+                    image: '',
+                    video: '',
+                    affiliateLink: "https://example.com/product/" + i,
+                    category: "General",
+                    isPublished: false, // All start as UNPUBLISHED
+                    createdAt: Date.now(),
+                    updatedAt: Date.now(),
+                    source: 'demo'
+                });
+            }
+
+            console.log('✅ Generated', ALL_PRODUCTS.length, 'demo products');
+            showToast(`🎉 Generated ${ALL_PRODUCTS.length.toLocaleString()} demo products!`, 'success');
+        }
+
+        // Load admin panel with published/unpublished sections
+        function loadAdminPanel() {
+            const unpublished = ALL_PRODUCTS.filter(p => !p.isPublished);
+            const published = ALL_PRODUCTS.filter(p => p.isPublished);
+
+            console.log('Admin Panel - Published:', published.length, 'Unpublished:', unpublished.length);
+
+            // Render both sections
+            renderAdminProducts(published, unpublished);
+        }
+
+        // Initialize demo products on page load
+        generateDemoProducts();
 
         // Load Demo Products (10,000+ for scalability testing)
         async function loadDemoProducts(count = 10000) {
