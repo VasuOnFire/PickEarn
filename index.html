@@ -4635,6 +4635,8 @@
         let currentUser = null;
         let isAdmin = false;
         let editingProductId = null;
+        let editingProductSource = null; // 'local', 'firebase', or 'shared'
+        let editingFirebaseId = null; // Firebase doc ID when editing Firebase products
         let deleteProductId = null;
 
         // Safe Storage - Works even when localStorage is blocked
@@ -4741,18 +4743,23 @@
                 const sharedProducts = SharedProductLoader.getSharedProducts();
                 // Get Firebase products (real-time cloud sync)
                 const firebaseProducts = JSON.parse(SafeStorage.getItem('pickearn_firebase_products') || '[]');
-                
+
+                // Add source tracking to each product type
+                const localWithSource = localProducts.map(p => ({ ...p, source: p.source || 'local', isLocal: true }));
+                const sharedWithSource = sharedProducts.map(p => ({ ...p, source: p.source || 'shared', isShared: true }));
+                const firebaseWithSource = firebaseProducts.map(p => ({ ...p, source: p.source || 'firebase', isFirebase: true }));
+
                 // Merge strategy: Firebase + Shared + Local
                 // Priority: Local > Firebase > Shared (admin can override everything)
-                const localIds = new Set(localProducts.map(p => p.id));
-                const firebaseIds = new Set(firebaseProducts.map(p => p.id));
-                
+                const localIds = new Set(localWithSource.map(p => p.id));
+                const firebaseIds = new Set(firebaseWithSource.map(p => p.id));
+
                 // Filter out duplicates (local takes priority over Firebase)
-                const uniqueFirebase = firebaseProducts.filter(p => !localIds.has(p.id));
+                const uniqueFirebase = firebaseWithSource.filter(p => !localIds.has(p.id));
                 const allRemoteIds = new Set([...localIds, ...firebaseIds]);
-                const uniqueShared = sharedProducts.filter(p => !allRemoteIds.has(p.id));
-                
-                return [...uniqueShared, ...uniqueFirebase, ...localProducts];
+                const uniqueShared = sharedWithSource.filter(p => !allRemoteIds.has(p.id));
+
+                return [...uniqueShared, ...uniqueFirebase, ...localWithSource];
             },
             saveProducts(products) { SafeStorage.setItem('pickearn_products', JSON.stringify(products)); },
             getSession() { return JSON.parse(SafeStorage.getItem('pickearn_session') || 'null'); },
@@ -7153,6 +7160,8 @@
         // Product Management
         function resetProductForm() {
             editingProductId = null;
+            editingProductSource = null;
+            editingFirebaseId = null;
             document.getElementById('productFormTitle').textContent = '➕ Add New Product';
             document.getElementById('productSubmitBtn').textContent = 'Add Product';
             document.getElementById('productName').value = '';
@@ -7429,12 +7438,25 @@
 
             // Also save to Firebase for real-time sync (non-blocking)
             if (window.FirebaseSync && window.FirebaseSync.enabled) {
-                const productToSync = editingProductId
-                    ? { ...products.find(p => p.id === editingProductId) }
-                    : { ...product };
-                window.FirebaseSync.saveProduct(productToSync).catch(e => {
-                    console.log("Firebase sync failed (offline?):", e);
-                });
+                if (editingProductId && editingProductSource === 'firebase' && editingFirebaseId) {
+                    // Update existing Firebase product
+                    const updatedProduct = { ...product, id: editingProductId, source: 'firebase' };
+                    window.FirebaseSync.updateProduct(editingFirebaseId, updatedProduct).catch(e => {
+                        console.log("Firebase update failed (offline?):", e);
+                    });
+                } else if (editingProductId) {
+                    // Editing local product - save as new Firebase product for global sync
+                    const productToSync = { ...product, id: editingProductId, source: 'firebase' };
+                    window.FirebaseSync.saveProduct(productToSync).catch(e => {
+                        console.log("Firebase sync failed (offline?):", e);
+                    });
+                } else {
+                    // New product - save to Firebase
+                    const productToSync = { ...product, source: 'firebase' };
+                    window.FirebaseSync.saveProduct(productToSync).catch(e => {
+                        console.log("Firebase sync failed (offline?):", e);
+                    });
+                }
             }
 
             resetProductForm();
@@ -7447,6 +7469,12 @@
             if (!p) return;
 
             editingProductId = productId;
+
+            // Track product source for proper save handling
+            editingProductSource = p.isFirebase ? 'firebase' : (p.isShared ? 'shared' : 'local');
+            editingFirebaseId = p.firebaseId || null;
+
+            console.log('Editing product:', productId, 'Source:', editingProductSource, 'FirebaseId:', editingFirebaseId);
             document.getElementById('productFormTitle').textContent = '✏️ Edit Product';
             document.getElementById('productSubmitBtn').textContent = 'Update Product';
             document.getElementById('productName').value = p.name;
@@ -9441,6 +9469,29 @@
                 }
             },
 
+            // Update product in Firebase
+            async updateProduct(firebaseId, updatedData) {
+                if (!firebaseEnabled || !db || !firebaseId) {
+                    console.log("Firebase not available - cannot update");
+                    return false;
+                }
+                try {
+                    // Remove local-only properties before updating Firebase
+                    const cleanData = { ...updatedData };
+                    delete cleanData.isShared;
+                    delete cleanData.isFirebase;
+                    delete cleanData.firebaseId;
+                    delete cleanData.source;
+
+                    await updateDoc(doc(db, "products", firebaseId), cleanData);
+                    console.log("Updated in Firebase ✅ ID:", firebaseId);
+                    return true;
+                } catch (e) {
+                    console.log("Firebase update error:", e);
+                    return false;
+                }
+            },
+
             // Real-time listener setup
             setupRealtimeSync(callback) {
                 if (!firebaseEnabled || !db) {
@@ -9454,9 +9505,11 @@
                         const products = [];
                         snapshot.forEach((docItem) => {
                             products.push({ 
+                                id: docItem.data().id || docItem.id,
                                 firebaseId: docItem.id, 
                                 ...docItem.data(),
-                                isFirebase: true 
+                                isFirebase: true,
+                                source: 'firebase'
                             });
                         });
                         console.log(`Firebase sync: ${products.length} products`);
