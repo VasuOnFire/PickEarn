@@ -4454,6 +4454,12 @@
                     <h3 class="section-title">📦 Manage Products</h3>
                     <button class="btn btn-primary" onclick="showSection('addProduct')">➕ Add New</button>
                 </div>
+                <!-- Admin Filter Navbar -->
+                <div class="admin-filter-nav" style="display: flex; gap: 0.5rem; margin: 1rem 0; padding: 0.75rem; background: rgba(255,255,255,0.05); border-radius: 12px;">
+                    <button class="btn btn-sm btn-secondary" onclick="filterAdminProducts('all')" id="filterAll">All Products</button>
+                    <button class="btn btn-sm btn-warning" onclick="filterAdminProducts('unpublished')" id="filterUnpublished">📝 Unpublished</button>
+                    <button class="btn btn-sm btn-success" onclick="filterAdminProducts('published')" id="filterPublished">🚀 Published</button>
+                </div>
                 <div class="products-grid" id="adminProductsGrid"></div>
                 <div class="empty-state" id="adminEmptyState" style="display: none;">
                     <div class="empty-icon">📦</div>
@@ -6014,7 +6020,7 @@
                 <div class="admin-actions">
                     <button class="btn btn-secondary btn-sm" onclick="editProduct('${product.id}')">Edit</button>
                     <button class="btn btn-danger btn-sm" onclick="confirmDeleteProduct('${product.id}')">Delete</button>
-                    <button class="btn btn-sm ${product.isPublished ? 'btn-warning' : 'btn-success'}" onclick="togglePublish('${product.id}', ${!product.isPublished})">
+                    <button class="btn btn-sm ${product.isPublished ? 'btn-warning' : 'btn-success'}" onclick="togglePublish('${product.id}', ${product.isPublished})">
                         ${product.isPublished ? '📋 Unpublish' : '🚀 Publish'}
                     </button>
                 </div>
@@ -7684,8 +7690,8 @@
             deleteProductId = null;
         }
 
-        // Toggle product publish status
-        async function togglePublish(productId, status) {
+        // Toggle product publish status (uses !currentStatus pattern)
+        async function togglePublish(productId, currentStatus) {
             const allProducts = DataManager.getProducts();
             const product = allProducts.find(p => p.id === productId);
 
@@ -7694,14 +7700,16 @@
                 return;
             }
 
+            const newStatus = !currentStatus; // Toggle the status
+
             // Update in Firebase if available
             if (window.FirebaseSync && window.FirebaseSync.enabled && product.firebaseId) {
                 try {
                     await window.FirebaseSync.updateProduct(product.firebaseId, {
-                        isPublished: status,
+                        isPublished: newStatus,
                         updatedAt: new Date().toISOString()
                     });
-                    showToast(status ? 'Product published!' : 'Product unpublished!', 'success');
+                    showToast(newStatus ? '🚀 Product published!' : '📋 Product unpublished!', 'success');
                 } catch (e) {
                     console.log('Firebase publish toggle failed:', e);
                     showToast('Failed to update status', 'error');
@@ -7711,10 +7719,10 @@
                 const localProducts = JSON.parse(SafeStorage.getItem('pickearn_products') || '[]');
                 const idx = localProducts.findIndex(p => p.id === productId);
                 if (idx !== -1) {
-                    localProducts[idx].isPublished = status;
+                    localProducts[idx].isPublished = newStatus;
                     localProducts[idx].updatedAt = new Date().toISOString();
                     SafeStorage.setItem('pickearn_products', JSON.stringify(localProducts));
-                    showToast(status ? 'Product published!' : 'Product unpublished!', 'success');
+                    showToast(newStatus ? '🚀 Product published!' : '📋 Product unpublished!', 'success');
                 }
             }
         }
@@ -7823,6 +7831,36 @@
 
             showToast(`🗑️ ${deleted} demo products deleted`, 'success');
             renderAdminProducts();
+        }
+
+        // Filter admin products by status (all, published, unpublished)
+        let currentAdminFilter = 'all';
+
+        function filterAdminProducts(filter) {
+            currentAdminFilter = filter;
+
+            // Update button styles
+            document.getElementById('filterAll').className = `btn btn-sm ${filter === 'all' ? 'btn-primary' : 'btn-secondary'}`;
+            document.getElementById('filterUnpublished').className = `btn btn-sm ${filter === 'unpublished' ? 'btn-warning' : 'btn-secondary'}`;
+            document.getElementById('filterPublished').className = `btn btn-sm ${filter === 'published' ? 'btn-success' : 'btn-secondary'}`;
+
+            // Get all products
+            const allProducts = DataManager.getProducts();
+            const published = allProducts.filter(p => p.isPublished === true);
+            const unpublished = allProducts.filter(p => p.isPublished !== true);
+
+            // Filter based on selection
+            let filteredPublished = published;
+            let filteredUnpublished = unpublished;
+
+            if (filter === 'published') {
+                filteredUnpublished = [];
+            } else if (filter === 'unpublished') {
+                filteredPublished = [];
+            }
+
+            // Render with filtered results
+            renderAdminProducts(filteredPublished, filteredUnpublished);
         }
 
         // Admin AI Verification
