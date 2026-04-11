@@ -4682,13 +4682,6 @@
         };
         SafeStorage.init();
 
-        // Load shared products for cross-device sync
-        SharedProductLoader.loadSharedProducts().then(() => {
-            console.log('Shared products loaded successfully');
-        }).catch(err => {
-            console.log('Shared products load failed:', err);
-        });
-
         // Shared Product Loader - Cross-device data sync
         const SharedProductLoader = {
             sharedProducts: [],
@@ -4733,6 +4726,9 @@
                 return this.sharedProducts || [];
             }
         };
+
+        // Load shared products for cross-device sync (non-blocking)
+        SharedProductLoader.loadSharedProducts().catch(() => {});
 
         // Data Manager
         const DataManager = {
