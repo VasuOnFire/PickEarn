@@ -9994,5 +9994,643 @@
             });
         }
     </script>
+
+    <!-- Tesseract.js OCR Library for AI Invoice Verification -->
+    <script src='https://unpkg.com/tesseract.js@4.1.1/dist/tesseract.min.js'></script>
+
+    <!-- AI Invoice Verification and Smart Reward System -->
+    <script>
+        // ============================================
+        // AI INVOICE VERIFICATION SYSTEM
+        // ============================================
+
+        // Global invoice storage
+        const InvoiceSystem = {
+            pendingInvoices: [],
+            approvedInvoices: [],
+            rejectedInvoices: [],
+            processedHashes: new Set(),
+
+            // Initialize system
+            init() {
+                this.loadFromStorage();
+                console.log('Invoice System initialized');
+            },
+
+            // Load from localStorage
+            loadFromStorage() {
+                const pending = localStorage.getItem('pickearn_pending_invoices');
+                const approved = localStorage.getItem('pickearn_approved_invoices');
+                const rejected = localStorage.getItem('pickearn_rejected_invoices');
+                const hashes = localStorage.getItem('pickearn_invoice_hashes');
+
+                if (pending) this.pendingInvoices = JSON.parse(pending);
+                if (approved) this.approvedInvoices = JSON.parse(approved);
+                if (rejected) this.rejectedInvoices = JSON.parse(rejected);
+                if (hashes) this.processedHashes = new Set(JSON.parse(hashes));
+            },
+
+            // Save to localStorage
+            saveToStorage() {
+                localStorage.setItem('pickearn_pending_invoices', JSON.stringify(this.pendingInvoices));
+                localStorage.setItem('pickearn_approved_invoices', JSON.stringify(this.approvedInvoices));
+                localStorage.setItem('pickearn_rejected_invoices', JSON.stringify(this.rejectedInvoices));
+                localStorage.setItem('pickearn_invoice_hashes', JSON.stringify([...this.processedHashes]));
+            }
+        };
+
+        // Initialize on load
+        InvoiceSystem.init();
+
+        // ============================================
+        // 1. SMART INVOICE INPUT HANDLERS
+        // ============================================
+
+        // Handle file upload
+        async function handleInvoiceUpload(event, productId) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // Show loading
+            showToast('📄 Analyzing invoice...', 'info');
+
+            try {
+                // Check for duplicate
+                const fileHash = generateFileHash(file);
+                if (InvoiceSystem.processedHashes.has(fileHash)) {
+                    showToast('⚠️ This invoice has already been submitted', 'error');
+                    return;
+                }
+
+                // Process invoice
+                const result = await processInvoice(file, productId, fileHash);
+
+                if (result.fraudFlag) {
+                    showToast('🚨 Suspicious invoice detected. Sent to admin review.', 'warning');
+                } else if (result.confidence >= 80) {
+                    showToast(`✅ Invoice approved! You earned ${result.coins} coins`, 'success');
+                    addCoins(result.userId || 'current_user', result.coins);
+                } else {
+                    showToast('⏳ Invoice under review by admin', 'info');
+                }
+
+                // Refresh admin panel if visible
+                if (typeof renderInvoiceVerificationPanel === 'function') {
+                    renderInvoiceVerificationPanel();
+                }
+
+            } catch (error) {
+                console.error('Invoice upload error:', error);
+                showToast('❌ Failed to process invoice', 'error');
+            }
+        }
+
+        // Handle camera capture
+        async function handleCameraCapture(event, productId) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            showToast('📸 Processing captured image...', 'info');
+
+            try {
+                const fileHash = generateFileHash(file);
+                if (InvoiceSystem.processedHashes.has(fileHash)) {
+                    showToast('⚠️ This image has already been submitted', 'error');
+                    return;
+                }
+
+                const result = await processInvoice(file, productId, fileHash);
+
+                if (result.fraudFlag) {
+                    showToast('🚨 Suspicious invoice detected. Sent to admin review.', 'warning');
+                } else if (result.confidence >= 80) {
+                    showToast(`✅ Invoice approved! You earned ${result.coins} coins`, 'success');
+                    addCoins(result.userId || 'current_user', result.coins);
+                } else {
+                    showToast('⏳ Invoice under review by admin', 'info');
+                }
+
+                if (typeof renderInvoiceVerificationPanel === 'function') {
+                    renderInvoiceVerificationPanel();
+                }
+
+            } catch (error) {
+                console.error('Camera capture error:', error);
+                showToast('❌ Failed to process image', 'error');
+            }
+        }
+
+        // ============================================
+        // 2. AI OCR ANALYSIS
+        // ============================================
+
+        async function performOCR(file) {
+            try {
+                const result = await Tesseract.recognize(
+                    file,
+                    'eng',
+                    { logger: m => console.log(m) }
+                );
+
+                const text = result.data.text;
+
+                // Extract data from OCR text
+                const ocrData = {
+                    text: text,
+                    price: extractPrice(text),
+                    productName: extractProductName(text),
+                    invoiceNumber: extractInvoiceNumber(text),
+                    date: extractDate(text),
+                    keywordsFound: checkKeywords(text),
+                    validFormat: validateInvoiceFormat(text)
+                };
+
+                return ocrData;
+            } catch (error) {
+                console.error('OCR Error:', error);
+                throw new Error('OCR analysis failed');
+            }
+        }
+
+        // Extract price from text
+        function extractPrice(text) {
+            // Match currency patterns: ₹, Rs, INR, $ followed by numbers
+            const patterns = [
+                /₹\s*(\d{1,3}(,\d{3})*(\.\d{2})?)/i,
+                /Rs\.?\s*(\d{1,3}(,\d{3})*(\.\d{2})?)/i,
+                /INR\s*(\d{1,3}(,\d{3})*(\.\d{2})?)/i,
+                /\$\s*(\d{1,3}(,\d{3})*(\.\d{2})?)/i,
+                /total[\s:]*(?:amount)?[\s:]*(?:₹|rs|inr)?\s*(\d{1,3}(,\d{3})*(\.\d{2})?)/i,
+                /amount[\s:]*(?:₹|rs|inr)?\s*(\d{1,3}(,\d{3})*(\.\d{2})?)/i,
+                /(\d{1,3}(,\d{3})*(\.\d{2})?)\s*(?:₹|rs|inr)/i
+            ];
+
+            for (const pattern of patterns) {
+                const match = text.match(pattern);
+                if (match) {
+                    return parseFloat(match[1].replace(/,/g, ''));
+                }
+            }
+
+            return 0;
+        }
+
+        // Extract product name
+        function extractProductName(text) {
+            const lines = text.split('\n').filter(line => line.trim().length > 3);
+
+            // Look for common product keywords
+            const productKeywords = ['product', 'item', 'description', 'name', 'title'];
+            for (const keyword of productKeywords) {
+                const pattern = new RegExp(`${keyword}[:\s]+(.{5,50})`, 'i');
+                const match = text.match(pattern);
+                if (match) return match[1].trim();
+            }
+
+            // Return first substantial line as fallback
+            return lines[0] || 'Unknown Product';
+        }
+
+        // Extract invoice number
+        function extractInvoiceNumber(text) {
+            const patterns = [
+                /invoice\s*(?:no|number|#)?[:\s]*([A-Z0-9-]{3,20})/i,
+                /bill\s*(?:no|number)?[:\s]*([A-Z0-9-]{3,20})/i,
+                /receipt\s*(?:no)?[:\s]*([A-Z0-9-]{3,20})/i,
+                /order\s*(?:id|number)?[:\s]*([A-Z0-9-]{3,20})/i,
+                /#\s*([A-Z0-9-]{5,20})/i
+            ];
+
+            for (const pattern of patterns) {
+                const match = text.match(pattern);
+                if (match) return match[1];
+            }
+
+            return 'Unknown';
+        }
+
+        // Extract date
+        function extractDate(text) {
+            const patterns = [
+                /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/,
+                /(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{2,4})/i,
+                /(\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2})/,
+                /date[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i
+            ];
+
+            for (const pattern of patterns) {
+                const match = text.match(pattern);
+                if (match) return match[1];
+            }
+
+            return new Date().toISOString().split('T')[0];
+        }
+
+        // Check for invoice keywords
+        function checkKeywords(text) {
+            const requiredKeywords = ['invoice', 'bill', 'receipt', 'total', 'amount', 'price', 'tax'];
+            const found = requiredKeywords.filter(kw => text.toLowerCase().includes(kw));
+            return found.length >= 2;
+        }
+
+        // Validate invoice format
+        function validateInvoiceFormat(text) {
+            const hasPrice = extractPrice(text) > 0;
+            const hasDate = extractDate(text) !== new Date().toISOString().split('T')[0];
+            const hasInvoiceNum = extractInvoiceNumber(text) !== 'Unknown';
+            return hasPrice && (hasDate || hasInvoiceNum);
+        }
+
+        // ============================================
+        // 3. PRODUCT MATCHING
+        // ============================================
+
+        function matchProduct(ocrData, productId) {
+            const allProducts = DataManager.getProducts();
+            const product = allProducts.find(p => p.id === productId);
+
+            if (!product) {
+                return { productMatch: false, priceMatch: false, product: null };
+            }
+
+            // Check if product name appears in OCR text
+            const productNameLower = product.name.toLowerCase();
+            const ocrTextLower = ocrData.text.toLowerCase();
+            const productMatch = ocrTextLower.includes(productNameLower) ||
+                                ocrTextLower.includes(productNameLower.split(' ')[0]);
+
+            // Check price matching (within 10% tolerance)
+            const priceTolerance = product.price * 0.1;
+            const priceMatch = Math.abs(ocrData.price - product.price) <= priceTolerance;
+
+            return { productMatch, priceMatch, product };
+        }
+
+        // ============================================
+        // 4. CONFIDENCE SCORE SYSTEM
+        // ============================================
+
+        function calculateConfidence(ocrData, productMatch, priceMatch) {
+            let score = 0;
+
+            if (productMatch) score += 40;
+            if (priceMatch) score += 30;
+            if (ocrData.validFormat) score += 20;
+            if (ocrData.keywordsFound) score += 10;
+
+            return Math.min(score, 100);
+        }
+
+        // ============================================
+        // 5. AUTO APPROVAL LOGIC
+        // ============================================
+
+        function shouldAutoApprove(confidence, fraudFlag) {
+            return confidence >= 80 && !fraudFlag;
+        }
+
+        // ============================================
+        // 6. FRAUD DETECTION SYSTEM
+        // ============================================
+
+        function detectFraud(ocrData, fileHash, productId) {
+            let fraudFlag = false;
+            let fraudReasons = [];
+
+            // Check for duplicate
+            if (InvoiceSystem.processedHashes.has(fileHash)) {
+                fraudFlag = true;
+                fraudReasons.push('Duplicate invoice');
+            }
+
+            // Check OCR mismatch
+            if (!ocrData.validFormat) {
+                fraudFlag = true;
+                fraudReasons.push('Invalid invoice format');
+            }
+
+            // Check missing keywords
+            if (!ocrData.keywordsFound) {
+                fraudFlag = true;
+                fraudReasons.push('Missing invoice keywords');
+            }
+
+            // Check invalid price
+            if (ocrData.price <= 0) {
+                fraudFlag = true;
+                fraudReasons.push('No valid price found');
+            }
+
+            // Check if price is unrealistically high
+            if (ocrData.price > 100000) {
+                fraudFlag = true;
+                fraudReasons.push('Suspiciously high price');
+            }
+
+            return { fraudFlag, fraudReasons };
+        }
+
+        // ============================================
+        // 7. DUPLICATE PREVENTION
+        // ============================================
+
+        function generateFileHash(file) {
+            return `${file.name}_${file.size}_${file.lastModified}`;
+        }
+
+        // ============================================
+        // 8. DYNAMIC COIN CALCULATION
+        // ============================================
+
+        function calculateCoins(price) {
+            if (price <= 0) return 0;
+            if (price <= 500) return 10;
+
+            let coins = 10;
+            coins += Math.floor(price / 500) * 10;
+
+            return coins;
+        }
+
+        // ============================================
+        // 9. MAIN INVOICE PROCESSING
+        // ============================================
+
+        async function processInvoice(file, productId, fileHash) {
+            // Perform OCR
+            const ocrData = await performOCR(file);
+
+            // Match product
+            const { productMatch, priceMatch, product } = matchProduct(ocrData, productId);
+
+            // Calculate confidence
+            const confidence = calculateConfidence(ocrData, productMatch, priceMatch);
+
+            // Detect fraud
+            const { fraudFlag, fraudReasons } = detectFraud(ocrData, fileHash, productId);
+
+            // Calculate coins
+            const coins = calculateCoins(ocrData.price);
+
+            // Create invoice object
+            const invoice = {
+                id: 'inv_' + Date.now(),
+                fileHash: fileHash,
+                productId: productId,
+                productName: product ? product.name : ocrData.productName,
+                fileName: file.name,
+                ocrData: ocrData,
+                price: ocrData.price,
+                coins: coins,
+                confidence: confidence,
+                fraudFlag: fraudFlag,
+                fraudReasons: fraudReasons,
+                status: shouldAutoApprove(confidence, fraudFlag) ? 'approved' : 'pending',
+                submittedAt: new Date().toISOString(),
+                userId: 'current_user'
+            };
+
+            // Store file as base64 for display
+            invoice.imageData = await fileToBase64(file);
+
+            // Add hash to processed set
+            InvoiceSystem.processedHashes.add(fileHash);
+
+            // Add to appropriate list
+            if (invoice.status === 'approved') {
+                InvoiceSystem.approvedInvoices.push(invoice);
+            } else if (fraudFlag) {
+                InvoiceSystem.pendingInvoices.push(invoice);
+            } else {
+                InvoiceSystem.pendingInvoices.push(invoice);
+            }
+
+            // Save to storage
+            InvoiceSystem.saveToStorage();
+
+            // Auto-approve if confidence is high
+            if (invoice.status === 'approved') {
+                addCoins(invoice.userId, invoice.coins);
+            }
+
+            return invoice;
+        }
+
+        // Convert file to base64
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // ============================================
+        // 10. ADMIN VERIFICATION PANEL
+        // ============================================
+
+        function renderInvoiceVerificationPanel() {
+            const panel = document.getElementById('invoiceVerificationPanel');
+            if (!panel) return;
+
+            const pending = InvoiceSystem.pendingInvoices.filter(inv => inv.status === 'pending');
+
+            if (pending.length === 0) {
+                panel.innerHTML = `
+                    <div class="admin-section">
+                        <h3>📋 Invoice Verification Panel</h3>
+                        <p style="padding: 20px; text-align: center; color: #666;">
+                            No pending invoices to verify.
+                        </p>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = `
+                <div class="admin-section">
+                    <h3>📋 Invoice Verification Panel (${pending.length} pending)</h3>
+                    <div class="invoices-container">
+            `;
+
+            pending.forEach(invoice => {
+                html += createInvoiceVerificationCard(invoice);
+            });
+
+            html += `
+                    </div>
+                </div>
+            `;
+
+            panel.innerHTML = html;
+        }
+
+        function createInvoiceVerificationCard(invoice) {
+            return `
+                <div class="invoice-verification-card" data-invoice-id="${invoice.id}">
+                    <div class="invoice-layout">
+                        <div class="invoice-image-section">
+                            <img src="${invoice.imageData}" alt="Invoice" class="invoice-image" />
+                        </div>
+                        <div class="invoice-details-section">
+                            <h4>🛒 ${invoice.productName}</h4>
+                            <div class="ocr-data">
+                                <p><strong>Extracted Price:</strong> ₹${invoice.price.toLocaleString()}</p>
+                                <p><strong>Invoice #:</strong> ${invoice.ocrData.invoiceNumber}</p>
+                                <p><strong>Date:</strong> ${invoice.ocrData.date}</p>
+                                <p><strong>Calculated Coins:</strong> ${invoice.coins} coins</p>
+                                <p><strong>Confidence Score:</strong> ${invoice.confidence}%</p>
+                                ${invoice.fraudFlag ? `<p class="fraud-warning">⚠️ Fraud Flag: ${invoice.fraudReasons.join(', ')}</p>` : ''}
+                            </div>
+                            <div class="verification-actions">
+                                <button class="btn btn-success" onclick="approveInvoice('${invoice.id}')">✅ Approve</button>
+                                <button class="btn btn-danger" onclick="rejectInvoice('${invoice.id}')">❌ Reject</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // ============================================
+        // 11 & 12. APPROVAL & REJECTION SYSTEM
+        // ============================================
+
+        function approveInvoice(invoiceId) {
+            const invoice = InvoiceSystem.pendingInvoices.find(inv => inv.id === invoiceId);
+            if (!invoice) return;
+
+            // Update status
+            invoice.status = 'approved';
+            invoice.approvedAt = new Date().toISOString();
+
+            // Move to approved list
+            InvoiceSystem.approvedInvoices.push(invoice);
+            InvoiceSystem.pendingInvoices = InvoiceSystem.pendingInvoices.filter(inv => inv.id !== invoiceId);
+
+            // Add coins to user
+            addCoins(invoice.userId, invoice.coins);
+
+            // Save
+            InvoiceSystem.saveToStorage();
+
+            // Notify user
+            showToast(`✅ Invoice approved! ${invoice.coins} coins awarded`, 'success');
+
+            // Refresh panel
+            renderInvoiceVerificationPanel();
+        }
+
+        function rejectInvoice(invoiceId) {
+            const invoice = InvoiceSystem.pendingInvoices.find(inv => inv.id === invoiceId);
+            if (!invoice) return;
+
+            // Update status
+            invoice.status = 'rejected';
+            invoice.rejectedAt = new Date().toISOString();
+
+            // Move to rejected list
+            InvoiceSystem.rejectedInvoices.push(invoice);
+            InvoiceSystem.pendingInvoices = InvoiceSystem.pendingInvoices.filter(inv => inv.id !== invoiceId);
+
+            // Save
+            InvoiceSystem.saveToStorage();
+
+            // Notify user
+            showToast('❌ Invoice rejected. No coins awarded.', 'error');
+
+            // Refresh panel
+            renderInvoiceVerificationPanel();
+        }
+
+        // ============================================
+        // 14. USER NOTIFICATION SYSTEM
+        // ============================================
+
+        function getUserInvoiceStatus(userId) {
+            const pending = InvoiceSystem.pendingInvoices.filter(inv => inv.userId === userId);
+            const approved = InvoiceSystem.approvedInvoices.filter(inv => inv.userId === userId);
+            const rejected = InvoiceSystem.rejectedInvoices.filter(inv => inv.userId === userId);
+
+            return {
+                pending: pending.length,
+                approved: approved.length,
+                rejected: rejected.length,
+                totalCoins: approved.reduce((sum, inv) => sum + inv.coins, 0)
+            };
+        }
+
+        function renderUserInvoiceNotifications(userId) {
+            const status = getUserInvoiceStatus(userId);
+
+            if (status.pending > 0) {
+                showToast(`⏳ ${status.pending} invoice(s) under review`, 'info');
+            }
+            if (status.approved > 0) {
+                showToast(`✅ You've earned ${status.totalCoins} coins from approved invoices!`, 'success');
+            }
+        }
+
+        // ============================================
+        // 16. AUTO CLEANUP SYSTEM
+        // ============================================
+
+        function cleanupOldInvoices() {
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+            // Keep only last 30 days of approved/rejected
+            InvoiceSystem.approvedInvoices = InvoiceSystem.approvedInvoices.filter(
+                inv => new Date(inv.approvedAt) > thirtyDaysAgo
+            );
+            InvoiceSystem.rejectedInvoices = InvoiceSystem.rejectedInvoices.filter(
+                inv => new Date(inv.rejectedAt) > thirtyDaysAgo
+            );
+
+            InvoiceSystem.saveToStorage();
+        }
+
+        // Run cleanup on load
+        cleanupOldInvoices();
+
+        // ============================================
+        // HELPER: Add coins to user
+        // ============================================
+
+        function addCoins(userId, amount) {
+            const currentCoins = parseInt(localStorage.getItem(`pickearn_coins_${userId}`) || '0');
+            const newTotal = currentCoins + amount;
+            localStorage.setItem(`pickearn_coins_${userId}`, newTotal.toString());
+
+            // Update UI if coin display exists
+            const coinDisplay = document.getElementById('userCoins');
+            if (coinDisplay) {
+                coinDisplay.textContent = newTotal.toLocaleString();
+            }
+
+            console.log(`Added ${amount} coins to user ${userId}. Total: ${newTotal}`);
+        }
+
+        // ============================================
+        // INITIALIZE ADMIN PANEL RENDER
+        // ============================================
+
+        // Add to existing admin panel render function
+        const originalRenderAdminPanel = window.renderAdminPanel;
+        window.renderAdminPanel = function() {
+            if (originalRenderAdminPanel) {
+                originalRenderAdminPanel();
+            }
+            renderInvoiceVerificationPanel();
+        };
+
+        // Initial render if admin panel is visible
+        if (document.getElementById('invoiceVerificationPanel')) {
+            renderInvoiceVerificationPanel();
+        }
+
+        console.log('✅ AI Invoice Verification System loaded successfully');
+    </script>
 </body>
 </html>
