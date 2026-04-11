@@ -4682,11 +4682,72 @@
         };
         SafeStorage.init();
 
+        // Load shared products for cross-device sync
+        SharedProductLoader.loadSharedProducts().then(() => {
+            console.log('Shared products loaded successfully');
+        }).catch(err => {
+            console.log('Shared products load failed:', err);
+        });
+
+        // Shared Product Loader - Cross-device data sync
+        const SharedProductLoader = {
+            sharedProducts: [],
+            loaded: false,
+
+            async loadSharedProducts() {
+                try {
+                    const response = await fetch('products.json');
+                    if (!response.ok) {
+                        console.log('Shared products fetch failed, using local data only');
+                        return false;
+                    }
+                    const data = await response.json();
+                    if (data && data.products && Array.isArray(data.products)) {
+                        this.sharedProducts = data.products.map(p => ({ ...p, isShared: true }));
+                        SafeStorage.setItem('pickearn_shared_products', JSON.stringify(this.sharedProducts));
+                        console.log(`Loaded ${this.sharedProducts.length} shared products`);
+                        this.loaded = true;
+                        return true;
+                    }
+                } catch (error) {
+                    console.log('Shared products error:', error.message);
+                    // Try to load from localStorage cache
+                    const cached = SafeStorage.getItem('pickearn_shared_products');
+                    if (cached) {
+                        this.sharedProducts = JSON.parse(cached);
+                        this.loaded = true;
+                        console.log(`Loaded ${this.sharedProducts.length} cached shared products`);
+                    }
+                }
+                return false;
+            },
+
+            getSharedProducts() {
+                if (!this.loaded) {
+                    const cached = SafeStorage.getItem('pickearn_shared_products');
+                    if (cached) {
+                        this.sharedProducts = JSON.parse(cached);
+                        this.loaded = true;
+                    }
+                }
+                return this.sharedProducts || [];
+            }
+        };
+
         // Data Manager
         const DataManager = {
             getUsers() { return JSON.parse(SafeStorage.getItem('pickearn_users') || '[]'); },
             saveUsers(users) { SafeStorage.setItem('pickearn_users', JSON.stringify(users)); },
-            getProducts() { return JSON.parse(SafeStorage.getItem('pickearn_products') || '[]'); },
+            getProducts() {
+                // Get local admin products
+                const localProducts = JSON.parse(SafeStorage.getItem('pickearn_products') || '[]');
+                // Get shared products (cross-device)
+                const sharedProducts = SharedProductLoader.getSharedProducts();
+                // Merge: local products take priority (admin can override shared)
+                const localIds = new Set(localProducts.map(p => p.id));
+                const uniqueShared = sharedProducts.filter(p => !localIds.has(p.id));
+                return [...uniqueShared, ...localProducts];
+            },
             saveProducts(products) { SafeStorage.setItem('pickearn_products', JSON.stringify(products)); },
             getSession() { return JSON.parse(SafeStorage.getItem('pickearn_session') || 'null'); },
             saveSession(session) { SafeStorage.setItem('pickearn_session', JSON.stringify(session)); },

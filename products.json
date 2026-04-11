@@ -1,0 +1,102 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2026-04-11",
+  "products": [
+    {
+      "id": "shared_prod_001",
+      "name": "Wireless Bluetooth Earbuds",
+      "description": "Premium wireless earbuds with active noise cancellation, 30-hour battery life, and IPX5 water resistance. Crystal clear sound for music and calls.",
+      "price": 49.99,
+      "category": "Electronics",
+      "rating": 4.5,
+      "keywords": "earbuds, bluetooth, wireless, headphones, audio, music",
+      "media": [
+        {
+          "type": "image",
+          "src": "https://images.unsplash.com/photo-1590658268037-6bf12145a8df?w=800&q=80"
+        }
+      ],
+      "isShared": true
+    },
+    {
+      "id": "shared_prod_002",
+      "name": "Smart Fitness Watch",
+      "description": "Track your health and fitness with this advanced smartwatch. Features heart rate monitoring, sleep tracking, GPS, and 7-day battery life.",
+      "price": 89.99,
+      "category": "Electronics",
+      "rating": 4.3,
+      "keywords": "smartwatch, fitness, tracker, health, wearable, sports",
+      "media": [
+        {
+          "type": "image",
+          "src": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&q=80"
+        }
+      ],
+      "isShared": true
+    },
+    {
+      "id": "shared_prod_003",
+      "name": "Organic Cotton T-Shirt",
+      "description": "Sustainable fashion with 100% organic cotton. Soft, breathable, and eco-friendly. Available in multiple colors and sizes.",
+      "price": 24.99,
+      "category": "Fashion",
+      "rating": 4.7,
+      "keywords": "tshirt, cotton, organic, clothing, fashion, eco, sustainable",
+      "media": [
+        {
+          "type": "image",
+          "src": "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=800&q=80"
+        }
+      ],
+      "isShared": true
+    },
+    {
+      "id": "shared_prod_004",
+      "name": "Portable Power Bank 20000mAh",
+      "description": "High-capacity power bank with fast charging support. Charge your phone up to 5 times. Compact design perfect for travel.",
+      "price": 35.99,
+      "category": "Electronics",
+      "rating": 4.6,
+      "keywords": "powerbank, charger, battery, portable, power, usb, travel",
+      "media": [
+        {
+          "type": "image",
+          "src": "https://images.unsplash.com/photo-1609091839311-d5365f9ff1c5?w=800&q=80"
+        }
+      ],
+      "isShared": true
+    },
+    {
+      "id": "shared_prod_005",
+      "name": "Stainless Steel Water Bottle",
+      "description": "Insulated water bottle keeps drinks cold for 24 hours or hot for 12 hours. BPA-free, leak-proof, and durable for everyday use.",
+      "price": 19.99,
+      "category": "Home",
+      "rating": 4.8,
+      "keywords": "bottle, water, steel, insulated, drink, travel, gym",
+      "media": [
+        {
+          "type": "image",
+          "src": "https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=800&q=80"
+        }
+      ],
+      "isShared": true
+    },
+    {
+      "id": "shared_prod_006",
+      "name": "Wireless Charging Pad",
+      "description": "Fast wireless charging for all Qi-enabled devices. Sleek design with LED indicator and non-slip surface. No more cable clutter.",
+      "price": 29.99,
+      "category": "Electronics",
+      "rating": 4.4,
+      "keywords": "charger, wireless, charging pad, qi, phone charger",
+      "media": [
+        {
+          "type": "image",
+          "src": "https://images.unsplash.com/photo-1586816879360-004f5b0c51e3?w=800&q=80"
+        }
+      ],
+      "isShared": true
+    }
+  ]
+}
