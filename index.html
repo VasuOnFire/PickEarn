@@ -5926,10 +5926,16 @@
             }
         }
 
-        function renderUserProducts() {
-            const products = DataManager.getProducts();
+        function renderUserProducts(publishedProducts = null) {
             const grid = document.getElementById('userProductsGrid');
             const empty = document.getElementById('userEmptyState');
+
+            // Use provided published products or filter from all products
+            let products = publishedProducts;
+            if (!products) {
+                const allProducts = DataManager.getProducts();
+                products = allProducts.filter(p => p.isPublished === true);
+            }
 
             if (products.length === 0) {
                 grid.innerHTML = '';
@@ -7225,9 +7231,19 @@
 
         // Product Management
         function resetProductForm() {
-            editingProductId = null;
-            editingProductSource = null;
-            editingFirebaseId = null;
+            let editingProductId = null;
+            let editingProductSource = null;
+            let editingFirebaseId = null;
+
+            // Pagination settings for large product lists
+            const PAGINATION = {
+                adminPublishedPage: 1,
+                adminUnpublishedPage: 1,
+                userPage: 1,
+                itemsPerPage: 50, // Show 50 products per page
+                maxVisiblePages: 5
+            };
+
             document.getElementById('productFormTitle').textContent = '➕ Add New Product';
             document.getElementById('productSubmitBtn').textContent = 'Add Product';
             document.getElementById('productName').value = '';
