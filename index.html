@@ -6004,6 +6004,9 @@
                 <div class="admin-actions">
                     <button class="btn btn-secondary btn-sm" onclick="editProduct('${product.id}')">Edit</button>
                     <button class="btn btn-danger btn-sm" onclick="confirmDeleteProduct('${product.id}')">Delete</button>
+                    <button class="btn btn-sm ${product.isPublished ? 'btn-warning' : 'btn-success'}" onclick="togglePublish('${product.id}', ${!product.isPublished})">
+                        ${product.isPublished ? '📋 Unpublish' : '🚀 Publish'}
+                    </button>
                 </div>
             ` : '';
 
@@ -6607,18 +6610,76 @@
             }
         }
 
-        function renderAdminProducts() {
-            const products = DataManager.getProducts();
+        function renderAdminProducts(published = [], unpublished = []) {
             const grid = document.getElementById('adminProductsGrid');
             const empty = document.getElementById('adminEmptyState');
 
-            if (products.length === 0) {
+            // If no arguments passed, get all products and split
+            if (arguments.length === 0) {
+                const allProducts = DataManager.getProducts();
+                published = allProducts.filter(p => p.isPublished === true);
+                unpublished = allProducts.filter(p => p.isPublished !== true);
+            }
+
+            const totalProducts = published.length + unpublished.length;
+
+            if (totalProducts === 0) {
                 grid.innerHTML = '';
                 empty.style.display = 'block';
                 return;
             }
+
             empty.style.display = 'none';
-            grid.innerHTML = products.map(p => createProductCard(p, true)).join('');
+
+            let html = '';
+
+            // Unpublished (Draft) Section
+            if (unpublished.length > 0) {
+                html += `
+                    <div class="product-section" style="margin-bottom: 2rem;">
+                        <div class="section-header" style="display: flex; align-items: center; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--warning);">
+                            <span style="font-size: 1.5rem; margin-right: 0.5rem;">📝</span>
+                            <h3 style="color: var(--warning); margin: 0;">Unpublished Products (${unpublished.length})</h3>
+                            <span style="margin-left: auto; font-size: 0.85rem; color: var(--text-secondary);">Drafts - Only visible to admin</span>
+                        </div>
+                        <div class="products-grid">
+                            ${unpublished.map(p => createProductCard(p, true)).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Published Section
+            if (published.length > 0) {
+                html += `
+                    <div class="product-section" style="margin-bottom: 2rem;">
+                        <div class="section-header" style="display: flex; align-items: center; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--success);">
+                            <span style="font-size: 1.5rem; margin-right: 0.5rem;">🚀</span>
+                            <h3 style="color: var(--success); margin: 0;">Published Products (${published.length})</h3>
+                            <span style="margin-left: auto; font-size: 0.85rem; color: var(--text-secondary);">Live - Visible to all users</span>
+                        </div>
+                        <div class="products-grid">
+                            ${published.map(p => createProductCard(p, true)).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Summary Stats
+            html += `
+                <div class="admin-stats" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-top: 1rem; padding: 1rem; background: rgba(255,255,255,0.05); border-radius: 12px;">
+                    <div style="text-align: center;">
+                        <div style="font-size: 1.5rem; font-weight: bold; color: var(--success);">${published.length}</div>
+                        <div style="font-size: 0.85rem; color: var(--text-secondary);">Published</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="font-size: 1.5rem; font-weight: bold; color: var(--warning);">${unpublished.length}</div>
+                        <div style="font-size: 0.85rem; color: var(--text-secondary);">Unpublished</div>
+                    </div>
+                </div>
+            `;
+
+            grid.innerHTML = html;
         }
 
         function renderAdminAnalytics() {
@@ -7426,6 +7487,7 @@
                 affiliateLink: document.getElementById('productAffiliate').value,
                 rating: parseFloat(document.getElementById('productRating').value) || 5,
                 category: document.getElementById('productCategory').value,
+                isPublished: editingProductId ? undefined : false, // New products default to unpublished
                 createdAt: editingProductId ? undefined : new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
@@ -7600,6 +7662,41 @@
         function closeDeleteModal() {
             document.getElementById('deleteModal').classList.remove('active');
             deleteProductId = null;
+        }
+
+        // Toggle product publish status
+        async function togglePublish(productId, status) {
+            const allProducts = DataManager.getProducts();
+            const product = allProducts.find(p => p.id === productId);
+
+            if (!product) {
+                showToast('Product not found', 'error');
+                return;
+            }
+
+            // Update in Firebase if available
+            if (window.FirebaseSync && window.FirebaseSync.enabled && product.firebaseId) {
+                try {
+                    await window.FirebaseSync.updateProduct(product.firebaseId, {
+                        isPublished: status,
+                        updatedAt: new Date().toISOString()
+                    });
+                    showToast(status ? 'Product published!' : 'Product unpublished!', 'success');
+                } catch (e) {
+                    console.log('Firebase publish toggle failed:', e);
+                    showToast('Failed to update status', 'error');
+                }
+            } else {
+                // Update in localStorage
+                const localProducts = JSON.parse(SafeStorage.getItem('pickearn_products') || '[]');
+                const idx = localProducts.findIndex(p => p.id === productId);
+                if (idx !== -1) {
+                    localProducts[idx].isPublished = status;
+                    localProducts[idx].updatedAt = new Date().toISOString();
+                    SafeStorage.setItem('pickearn_products', JSON.stringify(localProducts));
+                    showToast(status ? 'Product published!' : 'Product unpublished!', 'success');
+                }
+            }
         }
 
         // Admin AI Verification
@@ -9518,18 +9615,38 @@
                 try {
                     const q = query(collection(db, "products"), orderBy("createdAt", "desc"));
                     const unsubscribe = onSnapshot(q, (snapshot) => {
-                        const products = [];
+                        const publishedProducts = [];
+                        const unpublishedProducts = [];
+                        
                         snapshot.forEach((docItem) => {
-                            products.push({ 
+                            const data = {
                                 id: docItem.data().id || docItem.id,
                                 firebaseId: docItem.id, 
                                 ...docItem.data(),
                                 isFirebase: true,
                                 source: 'firebase'
-                            });
+                            };
+                            
+                            // Separate published and unpublished
+                            if (data.isPublished === true) {
+                                publishedProducts.push(data);
+                            } else {
+                                unpublishedProducts.push(data);
+                            }
                         });
-                        console.log(`Firebase sync: ${products.length} products`);
-                        if (callback) callback(products);
+                        
+                        const allProducts = [...publishedProducts, ...unpublishedProducts];
+                        console.log(`Firebase sync: ${publishedProducts.length} published, ${unpublishedProducts.length} unpublished`);
+                        
+                        // Store all products for backup
+                        SafeStorage.setItem('pickearn_firebase_products', JSON.stringify(allProducts));
+                        
+                        // Callback with separated products
+                        if (callback) callback({
+                            published: publishedProducts,
+                            unpublished: unpublishedProducts,
+                            all: allProducts
+                        });
                     }, (error) => {
                         console.log("Firebase sync error:", error);
                     });
@@ -9566,14 +9683,25 @@
 
         // Auto-setup real-time sync when app loads
         if (firebaseEnabled) {
-            window.FirebaseSync.setupRealtimeSync((firebaseProducts) => {
-                // Store Firebase products in localStorage cache
-                if (firebaseProducts.length > 0) {
-                    SafeStorage.setItem('pickearn_firebase_products', JSON.stringify(firebaseProducts));
-                    // Trigger UI refresh if renderProducts exists
-                    if (typeof renderProducts === 'function') {
-                        renderProducts();
-                    }
+            window.FirebaseSync.setupRealtimeSync((productData) => {
+                if (!productData) return;
+                
+                const { published, unpublished, all } = productData;
+                
+                // Store all products in localStorage cache
+                if (all && all.length > 0) {
+                    SafeStorage.setItem('pickearn_firebase_products', JSON.stringify(all));
+                }
+                
+                // Trigger UI refresh with separated products
+                if (typeof renderProducts === 'function') {
+                    // For user view - only show published
+                    renderProducts(published);
+                }
+                
+                if (typeof renderAdminProducts === 'function' && isAdmin) {
+                    // For admin view - show both sections
+                    renderAdminProducts(published, unpublished);
                 }
             });
         }
