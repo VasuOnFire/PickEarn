@@ -7738,40 +7738,98 @@
             renderProducts(ALL_PRODUCTS.filter(p => p.isPublished));
         }
 
-        // Generate 10,000 demo products
-        const ALL_PRODUCTS = [];
+        // Generate 10,000 demo products using Array.from
+        const ALL_PRODUCTS = Array.from({ length: 10000 }, (_, i) => ({
+            id: "demo" + (i + 1),
+            name: "Demo Product " + (i + 1),
+            description: "Premium product " + (i + 1) + " with excellent features and great value for money. High quality guaranteed.",
+            price: Math.floor(Math.random() * 5000) + 100,
+            rating: parseFloat((Math.random() * 5).toFixed(1)),
+            images: [],
+            videos: [],
+            image: '',
+            video: '',
+            affiliateLink: "https://example.com/product/" + (i + 1),
+            category: "General",
+            isPublished: false, // All start as UNPUBLISHED
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            source: 'demo'
+        }));
 
-        function generateDemoProducts() {
-            // Check if already generated
-            if (ALL_PRODUCTS.length > 0) {
-                console.log('Demo products already generated:', ALL_PRODUCTS.length);
-                return;
+        console.log('✅ Generated', ALL_PRODUCTS.length, 'demo products');
+        showToast(`🎉 Generated ${ALL_PRODUCTS.length.toLocaleString()} demo products!`, 'success');
+
+        // Create product card UI
+        function createDemoProductCard(p) {
+            const stars = '⭐'.repeat(Math.floor(p.rating || 4));
+            return `
+                <div class="product-card" data-id="${p.id}">
+                    <div class="product-image">
+                        <img src="https://via.placeholder.com/300x200/6366f1/ffffff?text=Demo+${p.id.replace('demo', '')}" alt="${p.name}" loading="lazy" />
+                    </div>
+                    <div class="product-info">
+                        <h3 class="product-name">${p.name}</h3>
+                        <p class="product-price">₹${p.price.toLocaleString()}</p>
+                        <p class="product-description">${p.description.substring(0, 80)}...</p>
+                        <div class="product-rating">${stars} ${p.rating}/5</div>
+                        <div class="product-actions">
+                            <button class="btn btn-sm btn-secondary" onclick="editProduct('${p.id}')">Edit</button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteProduct('${p.id}')">Delete</button>
+                            <button class="btn btn-sm ${p.isPublished ? 'btn-warning' : 'btn-success'}" onclick="togglePublishDemo('${p.id}')">
+                                ${p.isPublished ? '📋 Unpublish' : '🚀 Publish'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Render separate sections for published and unpublished
+        function renderSections() {
+            const unpublishedDiv = document.getElementById("unpublishedSection");
+            const publishedDiv = document.getElementById("publishedSection");
+            
+            if (!unpublishedDiv || !publishedDiv) return;
+
+            const unpublished = ALL_PRODUCTS.filter(p => !p.isPublished);
+            const published = ALL_PRODUCTS.filter(p => p.isPublished);
+
+            // Use document fragment for better performance
+            let unpublishedHTML = `<h2 class="section-title">📝 Unpublished Products (${unpublished.length.toLocaleString()})</h2><div class="products-grid">`;
+            let publishedHTML = `<h2 class="section-title">🚀 Published Products (${published.length.toLocaleString()})</h2><div class="products-grid">`;
+
+            // Batch rendering for performance
+            const batchSize = 100;
+            for (let i = 0; i < unpublished.length; i += batchSize) {
+                const batch = unpublished.slice(i, i + batchSize);
+                unpublishedHTML += batch.map(createDemoProductCard).join('');
+            }
+            
+            for (let i = 0; i < published.length; i += batchSize) {
+                const batch = published.slice(i, i + batchSize);
+                publishedHTML += batch.map(createDemoProductCard).join('');
             }
 
-            console.log('Generating 10,000 demo products...');
+            unpublishedHTML += '</div>';
+            publishedHTML += '</div>';
 
-            for (let i = 1; i <= 10000; i++) {
-                ALL_PRODUCTS.push({
-                    id: "demo_" + i,
-                    name: "Demo Product " + i,
-                    description: "This is demo product " + i + ". High quality item with excellent features and great value for money.",
-                    price: Math.floor(Math.random() * 2000) + 1,
-                    rating: parseFloat((Math.random() * 5).toFixed(1)),
-                    images: [],
-                    videos: [],
-                    image: '',
-                    video: '',
-                    affiliateLink: "https://example.com/product/" + i,
-                    category: "General",
-                    isPublished: false, // All start as UNPUBLISHED
-                    createdAt: Date.now(),
-                    updatedAt: Date.now(),
-                    source: 'demo'
-                });
+            unpublishedDiv.innerHTML = unpublishedHTML;
+            publishedDiv.innerHTML = publishedHTML;
+
+            console.log('Rendered - Published:', published.length, 'Unpublished:', unpublished.length);
+        }
+
+        // Toggle publish for demo products
+        function togglePublishDemo(id) {
+            const product = ALL_PRODUCTS.find(p => p.id === id);
+            if (product) {
+                product.isPublished = !product.isPublished;
+                product.updatedAt = Date.now();
+                showToast(product.isPublished ? '🚀 Product published!' : '📋 Product unpublished!', 'success');
+                renderSections();
+                renderProducts(ALL_PRODUCTS.filter(p => p.isPublished));
             }
-
-            console.log('✅ Generated', ALL_PRODUCTS.length, 'demo products');
-            showToast(`🎉 Generated ${ALL_PRODUCTS.length.toLocaleString()} demo products!`, 'success');
         }
 
         // Load admin panel with published/unpublished sections
@@ -7787,6 +7845,7 @@
 
         // Initialize demo products on page load
         generateDemoProducts();
+        renderSections();
 
         // Load Demo Products (10,000+ for scalability testing)
         async function loadDemoProducts(count = 10000) {
