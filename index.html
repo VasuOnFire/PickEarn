@@ -7426,6 +7426,17 @@
                 showToast('Product added!', 'success');
             }
             DataManager.saveProducts(products);
+
+            // Also save to Firebase for real-time sync (non-blocking)
+            if (window.FirebaseSync && window.FirebaseSync.enabled) {
+                const productToSync = editingProductId
+                    ? { ...products.find(p => p.id === editingProductId) }
+                    : { ...product };
+                window.FirebaseSync.saveProduct(productToSync).catch(e => {
+                    console.log("Firebase sync failed (offline?):", e);
+                });
+            }
+
             resetProductForm();
             showSection('manageProducts');
         }
@@ -7511,8 +7522,22 @@
 
         function deleteProduct() {
             if (!deleteProductId) return;
-            const products = DataManager.getProducts().filter(p => p.id !== deleteProductId);
+
+            // Get the product being deleted to check for firebaseId
+            const allProducts = DataManager.getProducts();
+            const productToDelete = allProducts.find(p => p.id === deleteProductId);
+
+            // Delete from localStorage
+            const products = allProducts.filter(p => p.id !== deleteProductId);
             DataManager.saveProducts(products);
+
+            // Also delete from Firebase if it has a firebaseId (non-blocking)
+            if (window.FirebaseSync && window.FirebaseSync.enabled && productToDelete && productToDelete.firebaseId) {
+                window.FirebaseSync.deleteProduct(productToDelete.firebaseId).catch(e => {
+                    console.log("Firebase delete failed (offline?):", e);
+                });
+            }
+
             deleteProductId = null;
             closeDeleteModal();
             renderAdminProducts();
