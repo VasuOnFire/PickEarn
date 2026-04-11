@@ -4456,9 +4456,9 @@
                 </div>
                 <!-- Admin Filter Navbar -->
                 <div class="admin-filter-nav" style="display: flex; gap: 0.5rem; margin: 1rem 0; padding: 0.75rem; background: rgba(255,255,255,0.05); border-radius: 12px;">
-                    <button class="btn btn-sm btn-secondary" onclick="filterAdminProducts('all')" id="filterAll">All Products</button>
-                    <button class="btn btn-sm btn-warning" onclick="filterAdminProducts('unpublished')" id="filterUnpublished">📝 Unpublished</button>
-                    <button class="btn btn-sm btn-success" onclick="filterAdminProducts('published')" id="filterPublished">🚀 Published</button>
+                    <button class="btn btn-sm btn-secondary" onclick="showAllProducts()" id="filterAll">All Products</button>
+                    <button class="btn btn-sm btn-warning" onclick="showUnpublishedProducts()" id="filterUnpublished">📝 Unpublished</button>
+                    <button class="btn btn-sm btn-success" onclick="showPublishedProducts()" id="filterPublished">🚀 Published</button>
                 </div>
                 <div class="products-grid" id="adminProductsGrid"></div>
                 <div class="empty-state" id="adminEmptyState" style="display: none;">
@@ -7764,6 +7764,71 @@
         console.log('✅ Generated', ALL_PRODUCTS.length, 'demo products');
         showToast(`🎉 Generated ${ALL_PRODUCTS.length.toLocaleString()} demo products!`, 'success');
 
+        // ============================================
+        // GLOBAL FILTER STATE (USER SAFETY PROTECTION)
+        // ============================================
+        let currentFilter = "all"; // all | published | unpublished
+        let currentView = "user"; // user | admin
+
+        // ============================================
+        // FILTER BUTTON FUNCTIONS
+        // ============================================
+        function showAllProducts() {
+            currentFilter = "all";
+            renderFilteredProducts();
+        }
+
+        function showPublishedProducts() {
+            currentFilter = "published";
+            renderFilteredProducts();
+        }
+
+        function showUnpublishedProducts() {
+            currentFilter = "unpublished";
+            renderFilteredProducts();
+        }
+
+        // ============================================
+        // CORE FILTER LOGIC (CRITICAL USER SAFETY 🔐)
+        // ============================================
+        function renderFilteredProducts() {
+            let filtered = [];
+
+            if (currentView === "user") {
+                // 🚨 USER MUST SEE ONLY PUBLISHED PRODUCTS
+                filtered = ALL_PRODUCTS.filter(p => p.isPublished === true);
+            } else {
+                // ADMIN VIEW WITH FILTERS
+                if (currentFilter === "published") {
+                    filtered = ALL_PRODUCTS.filter(p => p.isPublished === true);
+                } else if (currentFilter === "unpublished") {
+                    filtered = ALL_PRODUCTS.filter(p => p.isPublished === false);
+                } else {
+                    // Show all products
+                    filtered = ALL_PRODUCTS;
+                }
+            }
+
+            console.log("Current View:", currentView, "| Filter:", currentFilter, "| Products:", filtered.length);
+            renderProducts(filtered);
+        }
+
+        // ============================================
+        // VIEW SWITCHING (CRITICAL BUG FIX 🔥)
+        // ============================================
+        function openAdminPanel() {
+            currentView = "admin";
+            renderFilteredProducts();
+            // Also render sections for admin
+            renderSections();
+        }
+
+        function openUserPanel() {
+            currentView = "user";
+            currentFilter = "all"; // Reset filter
+            renderFilteredProducts();
+        }
+
         // Create product card UI
         function createDemoProductCard(p) {
             const stars = '⭐'.repeat(Math.floor(p.rating || 4));
@@ -7832,7 +7897,7 @@
                 product.updatedAt = Date.now();
                 showToast(product.isPublished ? '🚀 Product published!' : '📋 Product unpublished!', 'success');
                 renderSections();
-                renderProducts(ALL_PRODUCTS.filter(p => p.isPublished));
+                renderFilteredProducts(); // Use filtered rendering for consistency
             }
         }
 
