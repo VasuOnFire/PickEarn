@@ -4737,12 +4737,22 @@
             getProducts() {
                 // Get local admin products
                 const localProducts = JSON.parse(SafeStorage.getItem('pickearn_products') || '[]');
-                // Get shared products (cross-device)
+                // Get shared products (cross-device from JSON file)
                 const sharedProducts = SharedProductLoader.getSharedProducts();
-                // Merge: local products take priority (admin can override shared)
+                // Get Firebase products (real-time cloud sync)
+                const firebaseProducts = JSON.parse(SafeStorage.getItem('pickearn_firebase_products') || '[]');
+                
+                // Merge strategy: Firebase + Shared + Local
+                // Priority: Local > Firebase > Shared (admin can override everything)
                 const localIds = new Set(localProducts.map(p => p.id));
-                const uniqueShared = sharedProducts.filter(p => !localIds.has(p.id));
-                return [...uniqueShared, ...localProducts];
+                const firebaseIds = new Set(firebaseProducts.map(p => p.id));
+                
+                // Filter out duplicates (local takes priority over Firebase)
+                const uniqueFirebase = firebaseProducts.filter(p => !localIds.has(p.id));
+                const allRemoteIds = new Set([...localIds, ...firebaseIds]);
+                const uniqueShared = sharedProducts.filter(p => !allRemoteIds.has(p.id));
+                
+                return [...uniqueShared, ...uniqueFirebase, ...localProducts];
             },
             saveProducts(products) { SafeStorage.setItem('pickearn_products', JSON.stringify(products)); },
             getSession() { return JSON.parse(SafeStorage.getItem('pickearn_session') || 'null'); },
@@ -9310,6 +9320,158 @@
                     setTimeout(() => toast.remove(), 300);
                 }
             }, 3000);
+        }
+    </script>
+
+    <!-- Firebase Real-Time Sync Module -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { 
+            getFirestore, 
+            collection, 
+            addDoc, 
+            deleteDoc, 
+            doc, 
+            onSnapshot,
+            getDocs,
+            query,
+            orderBy
+        } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+        // Firebase configuration - REPLACE WITH YOUR CONFIG
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // Initialize Firebase (only if config is valid)
+        let app, db;
+        let firebaseEnabled = false;
+
+        try {
+            if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                firebaseEnabled = true;
+                console.log("Firebase initialized ✅");
+            } else {
+                console.log("Firebase not configured - using localStorage only");
+            }
+        } catch (e) {
+            console.log("Firebase init error:", e);
+        }
+
+        // Make Firebase functions available globally for the main script
+        window.FirebaseSync = {
+            enabled: firebaseEnabled,
+            db: db,
+
+            // Save product to Firebase
+            async saveProduct(product) {
+                if (!firebaseEnabled || !db) {
+                    console.log("Firebase not available - product saved locally only");
+                    return null;
+                }
+                try {
+                    // Remove any local-only properties
+                    const cleanProduct = { ...product };
+                    delete cleanProduct.isShared;
+                    
+                    const docRef = await addDoc(collection(db, "products"), cleanProduct);
+                    console.log("Saved to Firebase ✅ ID:", docRef.id);
+                    return docRef.id;
+                } catch (e) {
+                    console.log("Firebase save error:", e);
+                    return null;
+                }
+            },
+
+            // Delete product from Firebase
+            async deleteProduct(firebaseId) {
+                if (!firebaseEnabled || !db || !firebaseId) {
+                    console.log("Firebase not available or no ID - deleted locally only");
+                    return false;
+                }
+                try {
+                    await deleteDoc(doc(db, "products", firebaseId));
+                    console.log("Deleted from Firebase ✅ ID:", firebaseId);
+                    return true;
+                } catch (e) {
+                    console.log("Firebase delete error:", e);
+                    return false;
+                }
+            },
+
+            // Real-time listener setup
+            setupRealtimeSync(callback) {
+                if (!firebaseEnabled || !db) {
+                    console.log("Firebase sync not available");
+                    return null;
+                }
+                
+                try {
+                    const q = query(collection(db, "products"), orderBy("createdAt", "desc"));
+                    const unsubscribe = onSnapshot(q, (snapshot) => {
+                        const products = [];
+                        snapshot.forEach((docItem) => {
+                            products.push({ 
+                                firebaseId: docItem.id, 
+                                ...docItem.data(),
+                                isFirebase: true 
+                            });
+                        });
+                        console.log(`Firebase sync: ${products.length} products`);
+                        if (callback) callback(products);
+                    }, (error) => {
+                        console.log("Firebase sync error:", error);
+                    });
+                    
+                    return unsubscribe;
+                } catch (e) {
+                    console.log("Setup sync error:", e);
+                    return null;
+                }
+            },
+
+            // Get all products once (for initial load)
+            async getAllProducts() {
+                if (!firebaseEnabled || !db) return [];
+                
+                try {
+                    const q = query(collection(db, "products"), orderBy("createdAt", "desc"));
+                    const snapshot = await getDocs(q);
+                    const products = [];
+                    snapshot.forEach((docItem) => {
+                        products.push({ 
+                            firebaseId: docItem.id, 
+                            ...docItem.data(),
+                            isFirebase: true 
+                        });
+                    });
+                    return products;
+                } catch (e) {
+                    console.log("Get products error:", e);
+                    return [];
+                }
+            }
+        };
+
+        // Auto-setup real-time sync when app loads
+        if (firebaseEnabled) {
+            window.FirebaseSync.setupRealtimeSync((firebaseProducts) => {
+                // Store Firebase products in localStorage cache
+                if (firebaseProducts.length > 0) {
+                    SafeStorage.setItem('pickearn_firebase_products', JSON.stringify(firebaseProducts));
+                    // Trigger UI refresh if renderProducts exists
+                    if (typeof renderProducts === 'function') {
+                        renderProducts();
+                    }
+                }
+            });
         }
     </script>
 </body>
