@@ -4774,7 +4774,11 @@
                     !allRemoteIds.has(p.id) && !deletedShared.includes(p.id)
                 );
 
-                return [...uniqueShared, ...uniqueFirebase, ...localWithSource];
+                // Merge ALL_PRODUCTS (10K demo products) with existing products
+                const existingIds = new Set([...uniqueShared, ...uniqueFirebase, ...localWithSource].map(p => p.id));
+                const uniqueDemoProducts = ALL_PRODUCTS.filter(p => !existingIds.has(p.id));
+
+                return [...uniqueShared, ...uniqueFirebase, ...localWithSource, ...uniqueDemoProducts];
             },
             saveProducts(products) { SafeStorage.setItem('pickearn_products', JSON.stringify(products)); },
             getSession() { return JSON.parse(SafeStorage.getItem('pickearn_session') || 'null'); },
