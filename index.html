@@ -7694,6 +7694,24 @@
             deleteProductId = null;
         }
 
+        // ============================================
+        // RENDER PRODUCTS TO CONTAINER (FIXED 🔧)
+        // ============================================
+        function renderProducts(products) {
+            const container = document.getElementById("productsContainer");
+            if (!container) return;
+
+            // Clear container
+            container.innerHTML = "";
+
+            // Render each product
+            products.forEach(product => {
+                container.innerHTML += createProductCard(product);
+            });
+
+            console.log(`🎨 Rendered ${products.length} products to container`);
+        }
+
         // Toggle product publish status (uses !currentStatus pattern)
         async function togglePublish(productId, currentStatus) {
             const allProducts = DataManager.getProducts();
