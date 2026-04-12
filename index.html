@@ -7727,9 +7727,13 @@
                 return;
             }
 
+            // Use window.db as fallback if db is not in local scope
+            const firestoreDb = db || window.db;
+
             try {
-                if (!db) {
-                    throw new Error("Firestore not initialized");
+                if (!firestoreDb) {
+                    console.error("DB Check - db:", db, "window.db:", window.db);
+                    throw new Error("Firestore not initialized. Please refresh the page.");
                 }
 
                 // Check if product exists in Firestore
@@ -7737,7 +7741,7 @@
 
                 if (newStatus && !firestoreId) {
                     // DEMO PRODUCT: Use addDoc to CREATE new document in Firestore
-                    const docRef = await db.collection('products').add({
+                    const docRef = await firestoreDb.collection('products').add({
                         name: product.name,
                         price: product.price,
                         description: product.description,
@@ -7758,7 +7762,7 @@
 
                 } else if (firestoreId) {
                     // EXISTING FIRESTORE PRODUCT: Use updateDoc
-                    await db.collection('products').doc(firestoreId).update({
+                    await firestoreDb.collection('products').doc(firestoreId).update({
                         isPublished: newStatus,
                         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                     });
@@ -11214,7 +11218,12 @@
                 auth = firebase.auth();
                 db = firebase.firestore();
 
+                // Make db globally accessible
+                window.db = db;
+                window.firebase = firebase;
+
                 console.log('✅ Firebase Firestore initialized successfully');
+                console.log('DB instance:', db);
 
                 // Set up auth state listener
                 setupAuthListener();
