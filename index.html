@@ -6024,7 +6024,7 @@
                 <div class="admin-actions">
                     <button class="btn btn-secondary btn-sm" onclick="editProduct('${product.id}')">Edit</button>
                     <button class="btn btn-danger btn-sm" onclick="confirmDeleteProduct('${product.id}')">Delete</button>
-                    <button class="btn btn-sm ${product.isPublished ? 'btn-warning' : 'btn-success'}" onclick="togglePublish('${product.id}', ${product.isPublished})">
+                    <button class="btn btn-sm ${product.isPublished ? 'btn-warning' : 'btn-success'}" onclick="togglePublish('${product.id}', ${product.isPublished}, ${JSON.stringify(product).replace(/"/g, '&quot;')})">
                         ${product.isPublished ? '📋 Unpublish' : '🚀 Publish'}
                     </button>
                 </div>
@@ -7712,13 +7712,16 @@
         }
 
         // Toggle product publish status - FIRESTORE SYNC 🔥
-        async function togglePublish(productId, currentStatus) {
+        async function togglePublish(productId, currentStatus, productData) {
             const newStatus = !currentStatus;
             console.log("Publishing:", productId, "status:", newStatus);
 
-            // Get product from local array
-            const productIndex = ALL_PRODUCTS.findIndex(p => p.id === productId);
-            const product = productIndex !== -1 ? ALL_PRODUCTS[productIndex] : null;
+            // Get product from passed data or local array
+            let product = productData;
+            if (!product) {
+                const productIndex = ALL_PRODUCTS.findIndex(p => p.id === productId);
+                product = productIndex !== -1 ? ALL_PRODUCTS[productIndex] : null;
+            }
 
             if (!product) {
                 console.error("Product not found:", productId);
@@ -7739,7 +7742,7 @@
                 const firestoreId = firestoreProductIds.get(productId);
 
                 if (newStatus && !firestoreId) {
-                    // DEMO PRODUCT: Use addDoc to CREATE new document in Firestore
+                    // NEW PRODUCT: Use addDoc to CREATE new document in Firestore
                     const docRef = await firestoreDb.collection('products').add({
                         name: product.name,
                         price: product.price,
@@ -7754,7 +7757,6 @@
 
                     // Store mapping
                     firestoreProductIds.set(productId, docRef.id);
-                    product.firestoreId = docRef.id;
 
                     console.log("✅ Product added to Firestore:", docRef.id);
                     showToast("🚀 Product published successfully!", 'success');
@@ -7771,9 +7773,10 @@
                 } else {
                     // Unpublishing a product not in Firestore (no-op for Firestore)
                     console.log('Product not in Firestore, updating local only');
+                    showToast('Product unpublished locally', 'success');
                 }
 
-                // Update local product status
+                // Update product status
                 product.isPublished = newStatus;
                 product.updatedAt = Date.now();
 
@@ -8133,7 +8136,7 @@
                         <div class="product-actions">
                             <button class="btn btn-sm btn-secondary" onclick="editProduct('${p.id}')">Edit</button>
                             <button class="btn btn-sm btn-danger" onclick="deleteProduct('${p.id}')">Delete</button>
-                            <button class="btn btn-sm ${p.isPublished ? 'btn-warning' : 'btn-success'}" onclick="togglePublishDemo('${p.id}')">
+                            <button class="btn btn-sm ${p.isPublished ? 'btn-warning' : 'btn-success'}" onclick="togglePublishDemo('${p.id}', ${JSON.stringify(p).replace(/"/g, '&quot;')})">
                                 ${p.isPublished ? '📋 Unpublish' : '🚀 Publish'}
                             </button>
                         </div>
@@ -8267,10 +8270,15 @@
         }
 
         // Toggle publish for demo products - HYBRID SYSTEM
-        async function togglePublishDemo(id) {
+        async function togglePublishDemo(id, productData) {
             console.log("togglePublishDemo called:", id);
 
-            const product = ALL_PRODUCTS.find(p => p.id === id);
+            // Get product from passed data or local array
+            let product = productData;
+            if (!product) {
+                product = ALL_PRODUCTS.find(p => p.id === id);
+            }
+
             if (!product) {
                 console.error('Product not found:', id);
                 showToast('Product not found', 'error');
