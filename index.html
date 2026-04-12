@@ -8152,40 +8152,65 @@
             console.log('Rendered - Published:', published.length, 'Unpublished:', unpublished.length);
         }
 
-        // Toggle publish for demo products - FIRESTORE SYNC 🔥
+        // ============================================
+        // REALTIME DATABASE - UPDATE PRODUCT STATUS
+        // ============================================
+
+        async function updateProductStatus(productId, status) {
+            console.log("Publishing:", productId, status);
+
+            try {
+                if (!productId) {
+                    throw new Error("Invalid product ID");
+                }
+
+                if (!database) {
+                    throw new Error("Firebase database not initialized");
+                }
+
+                const productRef = database.ref('products/' + productId);
+
+                await productRef.update({
+                    isPublished: status,
+                    published: status,
+                    updatedAt: Date.now()
+                });
+
+                console.log("Status updated:", productId, status);
+                showToast(status ? "✅ Product published successfully" : "✅ Product unpublished successfully", 'success');
+
+                // Update local array for instant UI feedback
+                const productIndex = ALL_PRODUCTS.findIndex(p => p.id === productId);
+                if (productIndex !== -1) {
+                    ALL_PRODUCTS[productIndex].isPublished = status;
+                    ALL_PRODUCTS[productIndex].published = status;
+                    ALL_PRODUCTS[productIndex].updatedAt = Date.now();
+                }
+
+                // Refresh UI
+                prepareProductCache();
+                renderSections();
+                renderFilteredProducts();
+
+            } catch (error) {
+                console.error("Update failed:", error);
+                showToast("❌ Failed to update status: " + error.message, 'error');
+            }
+        }
+
+        // Toggle publish for demo products - uses Realtime Database
         async function togglePublishDemo(id) {
+            console.log("togglePublishDemo called:", id);
+
             const product = ALL_PRODUCTS.find(p => p.id === id);
             if (!product) {
                 console.error('Product not found:', id);
+                showToast('Product not found', 'error');
                 return;
             }
 
             const newStatus = !product.isPublished;
-            product.isPublished = newStatus;
-            product.updatedAt = Date.now();
-
-            // Update in Firestore (SINGLE SOURCE OF TRUTH)
-            try {
-                if (db) {
-                    await db.collection('products').doc(id).update({
-                        isPublished: newStatus,
-                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                    });
-                    console.log('✅ Firestore updated:', id, 'isPublished:', newStatus);
-                    showToast(newStatus ? '🚀 Product published!' : '📋 Product unpublished!', 'success');
-                } else {
-                    console.warn('Firestore not available, updating local only');
-                    showToast('Updated locally (sync when online)', 'warning');
-                }
-            } catch (error) {
-                console.error('Error updating publish status:', error);
-                showToast('Failed to update status', 'error');
-            }
-
-            // Update cache and refresh UI
-            prepareProductCache();
-            renderSections();
-            renderFilteredProducts();
+            await updateProductStatus(id, newStatus);
         }
 
         // Load admin panel with published/unpublished sections
@@ -11027,7 +11052,7 @@
         const ADMIN_EMAIL = "admin@pickearn.com"; // Change to your admin email
 
         // Initialize Firebase
-        let app, auth, db;
+        let app, auth, database;
         let currentUser = null;
         let isAdmin = false;
         let unsubscribeProducts = null;
@@ -11045,9 +11070,9 @@
                 // Initialize Firebase
                 app = firebase.initializeApp(firebaseConfig);
                 auth = firebase.auth();
-                db = firebase.firestore();
+                database = firebase.database();
 
-                console.log('✅ Firebase initialized successfully');
+                console.log('✅ Firebase Realtime Database initialized successfully');
 
                 // Set up auth state listener
                 setupAuthListener();
@@ -11066,7 +11091,7 @@
             const scripts = [
                 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js',
                 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js',
-                'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js'
+                'https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js'
             ];
 
             let loaded = 0;
