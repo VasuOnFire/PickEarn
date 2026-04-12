@@ -11620,6 +11620,23 @@
         }
 
         // ============================================
+        // MAKE FUNCTIONS GLOBAL FOR ONCLICK ACCESS
+        // ============================================
+
+        // Expose functions to window for onclick handlers
+        window.togglePublish = togglePublish;
+        window.togglePublishDemo = togglePublishDemo;
+        window.publishProduct = publishProduct;
+        window.unpublishProduct = unpublishProduct;
+
+        // Debug test function
+        window.testPublishClick = function(productId) {
+            console.log("✅ Publish button clicked! Product ID:", productId);
+            console.log("DB available:", !!window.db);
+            alert("Publish button working! Check console for details.");
+        };
+
+        // ============================================
         // INITIALIZE FIREBASE ON LOAD
         // ============================================
 
@@ -11631,6 +11648,7 @@
         }
 
         console.log('✅ Firebase Auth & Database System ready');
+        console.log('Available functions:', Object.keys(window).filter(k => ['togglePublish', 'publishProduct', 'testPublishClick'].includes(k)));
     </script>
 </body>
 </html>
