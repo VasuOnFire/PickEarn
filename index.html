@@ -8153,52 +8153,95 @@
         }
 
         // ============================================
-        // REALTIME DATABASE - UPDATE PRODUCT STATUS
+        // HYBRID SYSTEM: Local Admin + Firestore Published
         // ============================================
 
-        async function updateProductStatus(productId, status) {
-            console.log("Publishing:", productId, status);
+        // Store Firestore document IDs for published products
+        const firestoreProductIds = new Map(); // localId -> firestoreId
+
+        // Publish product to Firestore (makes it visible to users)
+        async function publishProduct(product) {
+            console.log("Publishing product to Firestore:", product.id);
 
             try {
-                if (!productId) {
-                    throw new Error("Invalid product ID");
+                if (!db) {
+                    throw new Error("Firestore not initialized");
                 }
 
-                if (!database) {
-                    throw new Error("Firebase database not initialized");
-                }
-
-                const productRef = database.ref('products/' + productId);
-
-                await productRef.update({
-                    isPublished: status,
-                    published: status,
-                    updatedAt: Date.now()
+                // Add to Firestore
+                const docRef = await db.collection('products').add({
+                    name: product.name,
+                    price: product.price,
+                    description: product.description,
+                    images: product.images || [],
+                    rating: product.rating || 4,
+                    isPublished: true,
+                    sourceProductId: product.id, // Reference to local demo product
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
 
-                console.log("Status updated:", productId, status);
-                showToast(status ? "✅ Product published successfully" : "✅ Product unpublished successfully", 'success');
+                // Store mapping
+                firestoreProductIds.set(product.id, docRef.id);
 
-                // Update local array for instant UI feedback
-                const productIndex = ALL_PRODUCTS.findIndex(p => p.id === productId);
-                if (productIndex !== -1) {
-                    ALL_PRODUCTS[productIndex].isPublished = status;
-                    ALL_PRODUCTS[productIndex].published = status;
-                    ALL_PRODUCTS[productIndex].updatedAt = Date.now();
-                }
+                // Update local product status
+                product.isPublished = true;
+                product.firestoreId = docRef.id;
+                product.updatedAt = Date.now();
+
+                console.log("✅ Product published to Firestore:", docRef.id);
+                showToast("🚀 Product published successfully!", 'success');
 
                 // Refresh UI
                 prepareProductCache();
                 renderSections();
-                renderFilteredProducts();
 
             } catch (error) {
-                console.error("Update failed:", error);
-                showToast("❌ Failed to update status: " + error.message, 'error');
+                console.error("❌ Publish failed:", error);
+                showToast("Failed to publish: " + error.message, 'error');
             }
         }
 
-        // Toggle publish for demo products - uses Realtime Database
+        // Unpublish product (remove from Firestore)
+        async function unpublishProduct(productId) {
+            console.log("Unpublishing product:", productId);
+
+            try {
+                if (!db) {
+                    throw new Error("Firestore not initialized");
+                }
+
+                // Get Firestore document ID
+                const firestoreId = firestoreProductIds.get(productId);
+
+                if (firestoreId) {
+                    // Delete from Firestore
+                    await db.collection('products').doc(firestoreId).delete();
+                    firestoreProductIds.delete(productId);
+                    console.log("✅ Product removed from Firestore:", firestoreId);
+                }
+
+                // Update local product status
+                const product = ALL_PRODUCTS.find(p => p.id === productId);
+                if (product) {
+                    product.isPublished = false;
+                    product.firestoreId = null;
+                    product.updatedAt = Date.now();
+                }
+
+                showToast("📋 Product unpublished", 'success');
+
+                // Refresh UI
+                prepareProductCache();
+                renderSections();
+
+            } catch (error) {
+                console.error("❌ Unpublish failed:", error);
+                showToast("Failed to unpublish: " + error.message, 'error');
+            }
+        }
+
+        // Toggle publish for demo products - HYBRID SYSTEM
         async function togglePublishDemo(id) {
             console.log("togglePublishDemo called:", id);
 
@@ -8209,8 +8252,68 @@
                 return;
             }
 
-            const newStatus = !product.isPublished;
-            await updateProductStatus(id, newStatus);
+            if (product.isPublished) {
+                // Unpublish
+                await unpublishProduct(id);
+            } else {
+                // Publish
+                await publishProduct(product);
+            }
+        }
+
+        // Set up real-time listener for published products (USER SIDE)
+        function setupPublishedProductsListener() {
+            if (!db) {
+                console.warn('Firestore not available');
+                return;
+            }
+
+            // Unsubscribe from previous listener if exists
+            if (unsubscribeProducts) {
+                unsubscribeProducts();
+            }
+
+            // Set up real-time listener for published products only
+            unsubscribeProducts = db.collection('products')
+                .where('isPublished', '==', true)
+                .orderBy('createdAt', 'desc')
+                .onSnapshot((snapshot) => {
+                    const publishedProducts = [];
+
+                    snapshot.forEach((doc) => {
+                        const data = doc.data();
+                        publishedProducts.push({
+                            id: doc.id,
+                            ...data
+                        });
+
+                        // Store mapping if sourceProductId exists
+                        if (data.sourceProductId) {
+                            firestoreProductIds.set(data.sourceProductId, doc.id);
+                        }
+                    });
+
+                    // Update ALL_PRODUCTS with published status from Firestore
+                    publishedProducts.forEach(fp => {
+                        const localProduct = ALL_PRODUCTS.find(p => p.id === fp.sourceProductId);
+                        if (localProduct && !localProduct.isPublished) {
+                            localProduct.isPublished = true;
+                            localProduct.firestoreId = fp.id;
+                        }
+                    });
+
+                    // Update cache
+                    prepareProductCache();
+
+                    // Render for users (only published)
+                    if (!isAdmin) {
+                        renderProducts(publishedProducts);
+                    }
+
+                    console.log('✅ Published products synced:', publishedProducts.length, 'items');
+                }, (error) => {
+                    console.error('Products listener error:', error);
+                });
         }
 
         // Load admin panel with published/unpublished sections
@@ -11052,7 +11155,7 @@
         const ADMIN_EMAIL = "admin@pickearn.com"; // Change to your admin email
 
         // Initialize Firebase
-        let app, auth, database;
+        let app, auth, db;
         let currentUser = null;
         let isAdmin = false;
         let unsubscribeProducts = null;
@@ -11070,15 +11173,15 @@
                 // Initialize Firebase
                 app = firebase.initializeApp(firebaseConfig);
                 auth = firebase.auth();
-                database = firebase.database();
+                db = firebase.firestore();
 
-                console.log('✅ Firebase Realtime Database initialized successfully');
+                console.log('✅ Firebase Firestore initialized successfully');
 
                 // Set up auth state listener
                 setupAuthListener();
 
-                // Set up real-time products listener
-                setupProductsListener();
+                // Set up real-time products listener for users
+                setupPublishedProductsListener();
 
             } catch (error) {
                 console.error('Firebase initialization error:', error);
@@ -11091,7 +11194,7 @@
             const scripts = [
                 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js',
                 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js',
-                'https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js'
+                'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js'
             ];
 
             let loaded = 0;
