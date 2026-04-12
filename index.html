@@ -8152,20 +8152,40 @@
             console.log('Rendered - Published:', published.length, 'Unpublished:', unpublished.length);
         }
 
-        // Toggle publish for demo products
-        function togglePublishDemo(id) {
+        // Toggle publish for demo products - FIRESTORE SYNC 🔥
+        async function togglePublishDemo(id) {
             const product = ALL_PRODUCTS.find(p => p.id === id);
-            if (product) {
-                product.isPublished = !product.isPublished;
-                product.updatedAt = Date.now();
-                showToast(product.isPublished ? '🚀 Product published!' : '📋 Product unpublished!', 'success');
-
-                // Update cache after status change (FAST! ⚡)
-                prepareProductCache();
-
-                renderSections();
-                renderFilteredProducts(); // Use filtered rendering for consistency
+            if (!product) {
+                console.error('Product not found:', id);
+                return;
             }
+
+            const newStatus = !product.isPublished;
+            product.isPublished = newStatus;
+            product.updatedAt = Date.now();
+
+            // Update in Firestore (SINGLE SOURCE OF TRUTH)
+            try {
+                if (db) {
+                    await db.collection('products').doc(id).update({
+                        isPublished: newStatus,
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    console.log('✅ Firestore updated:', id, 'isPublished:', newStatus);
+                    showToast(newStatus ? '🚀 Product published!' : '📋 Product unpublished!', 'success');
+                } else {
+                    console.warn('Firestore not available, updating local only');
+                    showToast('Updated locally (sync when online)', 'warning');
+                }
+            } catch (error) {
+                console.error('Error updating publish status:', error);
+                showToast('Failed to update status', 'error');
+            }
+
+            // Update cache and refresh UI
+            prepareProductCache();
+            renderSections();
+            renderFilteredProducts();
         }
 
         // Load admin panel with published/unpublished sections
