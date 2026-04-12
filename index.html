@@ -6024,8 +6024,8 @@
                 <div class="admin-actions">
                     <button class="btn btn-secondary btn-sm" onclick="editProduct('${product.id}')">Edit</button>
                     <button class="btn btn-danger btn-sm" onclick="confirmDeleteProduct('${product.id}')">Delete</button>
-                    <button class="btn btn-sm ${product.isPublished ? 'btn-warning' : 'btn-success'}" onclick="togglePublish(${product.id})">
-                        ${product.isPublished ? '📋 Unpublish' : '🚀 Publish'}
+                    <button class="btn btn-sm ${product.status === 'published' ? 'btn-warning' : 'btn-success'}" onclick="togglePublishStatus(${product.id})">
+                        ${product.status === 'published' ? '📋 Unpublish' : '🚀 Publish'}
                     </button>
                 </div>
             ` : '';
@@ -7711,36 +7711,79 @@
             console.log(`🎨 Rendered ${products.length} products to container`);
         }
 
-        // Toggle product publish status - LOCAL ONLY (NO FIREBASE)
-        function togglePublish(productId) {
-            console.log("togglePublish called:", productId);
+        // Toggle product publish status - LOCAL STORAGE VERSION
+        function togglePublishStatus(productId) {
+            console.log("togglePublishStatus called:", productId);
 
-            // Find product in ALL_PRODUCTS first
-            const productIndex = ALL_PRODUCTS.findIndex(p => p.id === productId);
-            if (productIndex === -1) {
-                console.error("Product not found:", productId);
+            // Get products from localStorage
+            let products = JSON.parse(localStorage.getItem("pickearn_products")) || [];
+
+            // Find and update product
+            let found = false;
+            products = products.map(product => {
+                if (product.id === productId) {
+                    found = true;
+                    // Toggle between published/unpublished
+                    product.status = product.status === "published" ? "unpublished" : "published";
+                    product.updatedAt = Date.now();
+                    console.log("Toggled product:", productId, "→", product.status);
+                }
+                return product;
+            });
+
+            if (!found) {
+                console.error("Product not found in localStorage:", productId);
                 showToast("Product not found", 'error');
                 return;
             }
 
-            const product = ALL_PRODUCTS[productIndex];
-            const newStatus = !product.isPublished;
-            console.log("Toggling publish:", productId, "→", newStatus);
-
-            // Toggle status
-            product.isPublished = newStatus;
-            product.updatedAt = Date.now();
-
-            // Update cached arrays
-            prepareProductCache();
+            // Save to localStorage
+            localStorage.setItem("pickearn_products", JSON.stringify(products));
+            console.log("Saved to localStorage:", products);
 
             // Show success message
-            showToast(newStatus ? '🚀 Product published!' : '📋 Product unpublished!', 'success');
+            const updatedProduct = products.find(p => p.id === productId);
+            showToast(updatedProduct.status === "published" ? '🚀 Published!' : '📋 Unpublished!', 'success');
 
             // Refresh UI
-            renderSections();
+            renderAdminProducts();
 
-            console.log('✅ Product status updated:', productId, 'isPublished:', newStatus);
+            console.log('✅ Status updated and saved:', productId, updatedProduct.status);
+        }
+
+        // Legacy function name for backward compatibility
+        function togglePublish(productId) {
+            togglePublishStatus(productId);
+        }
+
+        // Render admin products with localStorage
+        function renderAdminProducts() {
+            let products = JSON.parse(localStorage.getItem("pickearn_products")) || [];
+
+            // Auto-fix old products without status
+            products.forEach(p => {
+                if (!p.status) p.status = "unpublished";
+            });
+
+            console.log("Rendering admin products:", products.length);
+
+            // Call existing render function
+            renderSections();
+        }
+
+        // Get only published products for user view
+        function getPublishedProducts() {
+            let products = JSON.parse(localStorage.getItem("pickearn_products")) || [];
+
+            // Auto-fix old products
+            products.forEach(p => {
+                if (!p.status) p.status = "unpublished";
+            });
+
+            // Filter only published
+            const published = products.filter(p => p.status === "published");
+            console.log("Published products:", published.length);
+            return published;
         }
 
         // ============================================
@@ -7781,12 +7824,12 @@
             "Stylish and functional accessory that complements your lifestyle."
         ];
 
-        // Generate 10,000 products
+        // Generate 10,000 products with status field
         const ALL_PRODUCTS = Array.from({ length: 10000 }, (_, i) => {
             const template = productTemplates[i % productTemplates.length];
             const variant = Math.floor(i / productTemplates.length) + 1;
             const priceVariation = Math.floor(Math.random() * 1000) - 500;
-            
+
             return {
                 id: i + 1,
                 name: `${template.name} ${variant > 1 ? 'Pro ' + variant : ''}`,
@@ -7796,14 +7839,28 @@
                 image: `https://via.placeholder.com/200?text=${encodeURIComponent(template.name)}`,
                 video: i % 3 === 0 ? "https://www.youtube.com/embed/dQw4w9WgXcQ" : null,
                 category: template.category,
-                isPublished: false,
+                status: "unpublished",  // Using status field: "published" | "unpublished"
                 createdAt: Date.now() - Math.floor(Math.random() * 1000000000),
                 updatedAt: Date.now()
             };
         });
 
+        // Initialize localStorage with products (only on first load)
+        function initializeLocalStorage() {
+            const stored = localStorage.getItem("pickearn_products");
+            if (!stored) {
+                console.log("Initializing localStorage with", ALL_PRODUCTS.length, "products");
+                localStorage.setItem("pickearn_products", JSON.stringify(ALL_PRODUCTS));
+                showToast(`🎉 Initialized ${ALL_PRODUCTS.length.toLocaleString()} products!`, 'success');
+            } else {
+                console.log("Products already in localStorage");
+            }
+        }
+
+        // Initialize on load
+        initializeLocalStorage();
+
         console.log('✅ Generated', ALL_PRODUCTS.length, 'products');
-        showToast(`🎉 Generated ${ALL_PRODUCTS.length.toLocaleString()} products!`, 'success');
 
         // ============================================
         // CACHED ARRAYS FOR INSTANT FILTERING (PERFORMANCE OPTIMIZATION 🔥)
@@ -8145,8 +8202,8 @@
                         <div class="product-actions">
                             <button class="btn btn-sm btn-secondary" onclick="editProduct('${p.id}')">Edit</button>
                             <button class="btn btn-sm btn-danger" onclick="deleteProduct('${p.id}')">Delete</button>
-                            <button class="btn btn-sm ${p.isPublished ? 'btn-warning' : 'btn-success'}" onclick="togglePublish(${p.id})">
-                                ${p.isPublished ? '📋 Unpublish' : '🚀 Publish'}
+                            <button class="btn btn-sm ${p.status === 'published' ? 'btn-warning' : 'btn-success'}" onclick="togglePublishStatus(${p.id})">
+                                ${p.status === 'published' ? '📋 Unpublish' : '🚀 Publish'}
                             </button>
                         </div>
                     </div>
