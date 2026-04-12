@@ -7786,6 +7786,91 @@
         prepareProductCache();
 
         // ============================================
+        // VIRTUAL SCROLLING SYSTEM (AMAZON/INSTAGRAM STYLE 🔥)
+        // ============================================
+        let visibleStart = 0;
+        let visibleEnd = 20;
+        let itemHeight = 250; // approx product card height
+        let buffer = 5;
+        let currentData = []; // Current filtered products
+        let isVirtualScrollEnabled = true;
+
+        // Main render function - visible items only
+        function renderVirtualProducts(products) {
+            if (!isVirtualScrollEnabled) {
+                // Fallback to full render if virtual scroll disabled
+                renderProducts(products);
+                return;
+            }
+
+            const container = document.getElementById("productsContainer");
+            if (!container) return;
+
+            // Calculate visible items
+            const visibleItems = products.slice(visibleStart, visibleEnd);
+
+            // Generate HTML for visible items only
+            let html = "";
+            visibleItems.forEach(product => {
+                html += createProductCard(product);
+            });
+
+            // Set total height for scrollbar simulation
+            const totalHeight = products.length * itemHeight;
+            container.style.height = totalHeight + "px";
+
+            // Position offset for smooth scroll
+            const offset = visibleStart * itemHeight;
+            container.style.transform = `translateY(${offset}px)`;
+
+            // Render only visible items
+            container.innerHTML = html;
+
+            console.log(`🎯 Rendered ${visibleItems.length} of ${products.length} products (${visibleStart}-${visibleEnd})`);
+        }
+
+        // Scroll detection - CORE LOGIC 🔥
+        let scrollTimeout;
+        window.addEventListener("scroll", () => {
+            if (!isVirtualScrollEnabled || !currentData.length) return;
+
+            // Debounce for performance
+            clearTimeout(scrollTimeout);
+            scrollTimeout = setTimeout(() => {
+                const scrollTop = window.scrollY;
+
+                // Calculate visible range
+                const startIndex = Math.floor(scrollTop / itemHeight);
+
+                visibleStart = Math.max(0, startIndex - buffer);
+                visibleEnd = Math.min(currentData.length, startIndex + 20 + buffer);
+
+                // Re-render with new visible range
+                renderVirtualProducts(currentData);
+            }, 16); // ~60fps
+        });
+
+        // Initial load function
+        function loadInitialProducts(products) {
+            currentData = products;
+            visibleStart = 0;
+            visibleEnd = Math.min(20, products.length);
+            renderVirtualProducts(products);
+
+            // Reset scroll position
+            window.scrollTo(0, 0);
+        }
+
+        // Reset virtual scroll on filter change
+        function resetVirtualScroll() {
+            visibleStart = 0;
+            visibleEnd = 20;
+            window.scrollTo(0, 0);
+        }
+
+        console.log('✅ Virtual Scrolling System initialized');
+
+        // ============================================
         // GLOBAL FILTER STATE (USER SAFETY PROTECTION)
         // ============================================
         let currentFilter = "all"; // all | published | unpublished
@@ -7830,8 +7915,19 @@
                 }
             }
 
-            console.log("⚡ Cached View:", currentView, "| Filter:", currentFilter, "| Products:", data.length);
-            renderProducts(data);
+            // Reset virtual scroll on filter change (IMPORTANT! 🔥)
+            resetVirtualScroll();
+            currentData = data;
+
+            console.log("⚡ Virtual Scroll | View:", currentView, "| Filter:", currentFilter, "| Products:", data.length);
+
+            // Use virtual scrolling for 10K+ products (AMAZON/INSTAGRAM STYLE ⚡)
+            if (data.length > 50 && isVirtualScrollEnabled) {
+                loadInitialProducts(data);
+            } else {
+                // Fallback to normal render for small datasets
+                renderProducts(data);
+            }
         }
 
         // ============================================
