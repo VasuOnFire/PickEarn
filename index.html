@@ -9538,18 +9538,32 @@
             insightEl.innerHTML = message;
         }
 
-        // Withdrawal Progress Bar
+        // Withdrawal Progress Bar (with null checks for safety)
         function updateWithdrawalProgress(confirmedCoins, minWithdrawal) {
             const progressText = document.getElementById('progressText');
             const progressFill = document.getElementById('withdrawalProgressFill');
             const statusEl = document.getElementById('withdrawalStatus');
             const coinsNeededEl = document.getElementById('coinsNeeded');
 
-            const progress = Math.min((confirmedCoins / minWithdrawal) * 100, 100);
+            // Exit if elements not found (prevents TypeError)
+            if (!progressText || !progressFill || !statusEl || !coinsNeededEl) {
+                console.log('Withdrawal progress elements not found - skipping update');
+                return;
+            }
+
+            const percent = Math.min((confirmedCoins / minWithdrawal) * 100, 100);
             const remaining = Math.max(minWithdrawal - confirmedCoins, 0);
 
-            progressText.textContent = `${confirmedCoins.toLocaleString()} / ${minWithdrawal.toLocaleString()} coins`;
-            progressFill.style.width = `${progress}%`;
+            progressText.textContent = `${confirmedCoins}/${minWithdrawal} coins (${Math.round(percent)}%)`;
+            progressFill.style.width = `${percent}%`;
+
+            if (percent >= 100) {
+                statusEl.textContent = '✅ Withdrawal Unlocked!';
+                statusEl.className = 'withdrawal-status status-unlocked';
+            } else {
+                statusEl.textContent = `🔒 Need ${remaining} more coins`;
+                statusEl.className = 'withdrawal-status status-locked';
+            }
 
             if (confirmedCoins >= minWithdrawal) {
                 statusEl.innerHTML = '<span class="status-icon">🔓</span><span>You are eligible for withdrawal! 🎉</span>';
