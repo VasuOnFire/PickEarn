@@ -11691,9 +11691,18 @@
 
         // Expose functions to window for onclick handlers
         window.togglePublish = togglePublish;
+        window.togglePublishStatus = togglePublishStatus;
         window.togglePublishDemo = togglePublishDemo;
         window.publishProduct = publishProduct;
         window.unpublishProduct = unpublishProduct;
+        window.renderAdminProducts = renderAdminProducts;
+        window.getPublishedProducts = getPublishedProducts;
+
+        // Debug: Verify functions are available
+        console.log("✅ Functions exposed to window:");
+        console.log("- togglePublish:", typeof window.togglePublish);
+        console.log("- togglePublishStatus:", typeof window.togglePublishStatus);
+        console.log("- renderAdminProducts:", typeof window.renderAdminProducts);
 
         // Debug test function
         window.testPublishClick = function(productId) {
