@@ -7715,33 +7715,72 @@
         // Toggle product publish status - FIRESTORE SYNC 🔥
         async function togglePublish(productId, currentStatus) {
             const newStatus = !currentStatus;
+            console.log("Publishing:", productId, "status:", newStatus);
 
-            // Update in local array for instant UI feedback
+            // Get product from local array
             const productIndex = ALL_PRODUCTS.findIndex(p => p.id === productId);
-            if (productIndex !== -1) {
-                ALL_PRODUCTS[productIndex].isPublished = newStatus;
-                ALL_PRODUCTS[productIndex].updatedAt = Date.now();
+            const product = productIndex !== -1 ? ALL_PRODUCTS[productIndex] : null;
+
+            if (!product) {
+                console.error("Product not found:", productId);
+                showToast("Product not found", 'error');
+                return;
             }
 
-            // Update in Firestore (SINGLE SOURCE OF TRUTH)
             try {
-                if (db && productId) {
-                    await db.collection('products').doc(productId).update({
+                if (!db) {
+                    throw new Error("Firestore not initialized");
+                }
+
+                // Check if product exists in Firestore
+                const firestoreId = firestoreProductIds.get(productId);
+
+                if (newStatus && !firestoreId) {
+                    // DEMO PRODUCT: Use addDoc to CREATE new document in Firestore
+                    const docRef = await db.collection('products').add({
+                        name: product.name,
+                        price: product.price,
+                        description: product.description,
+                        images: product.images || [],
+                        rating: product.rating || 4,
+                        isPublished: true,
+                        sourceProductId: productId,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+
+                    // Store mapping
+                    firestoreProductIds.set(productId, docRef.id);
+                    product.firestoreId = docRef.id;
+
+                    console.log("✅ Product added to Firestore:", docRef.id);
+                    showToast("🚀 Product published successfully!", 'success');
+
+                } else if (firestoreId) {
+                    // EXISTING FIRESTORE PRODUCT: Use updateDoc
+                    await db.collection('products').doc(firestoreId).update({
                         isPublished: newStatus,
                         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                     });
-                    console.log('✅ Firestore updated:', productId, 'isPublished:', newStatus);
+
+                    console.log('✅ Firestore updated:', firestoreId, 'isPublished:', newStatus);
                     showToast(newStatus ? '🚀 Product published!' : '📋 Product unpublished!', 'success');
                 } else {
-                    console.warn('Firestore not available, updating local only');
-                    showToast('Updated locally (sync when online)', 'warning');
+                    // Unpublishing a product not in Firestore (no-op for Firestore)
+                    console.log('Product not in Firestore, updating local only');
                 }
+
+                // Update local product status
+                product.isPublished = newStatus;
+                product.updatedAt = Date.now();
+
             } catch (error) {
-                console.error('Error updating publish status:', error);
-                showToast('Failed to update status', 'error');
+                console.error("Update failed:", error);
+                showToast("❌ Failed to update status: " + error.message, 'error');
+                return;
             }
 
-            // Refresh UI (Firestore listener will update globally)
+            // Refresh UI
             prepareProductCache();
             renderFilteredProducts();
         }
