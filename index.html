@@ -7712,52 +7712,38 @@
             console.log(`🎨 Rendered ${products.length} products to container`);
         }
 
-        // Toggle product publish status (uses !currentStatus pattern)
+        // Toggle product publish status - FIRESTORE SYNC 🔥
         async function togglePublish(productId, currentStatus) {
-            const allProducts = DataManager.getProducts();
-            const product = allProducts.find(p => p.id === productId);
+            const newStatus = !currentStatus;
 
-            if (!product) {
-                showToast('Product not found', 'error');
-                return;
-            }
-
-            const newStatus = !currentStatus; // Toggle the status
-
-            // Update in ALL_PRODUCTS array
+            // Update in local array for instant UI feedback
             const productIndex = ALL_PRODUCTS.findIndex(p => p.id === productId);
             if (productIndex !== -1) {
                 ALL_PRODUCTS[productIndex].isPublished = newStatus;
                 ALL_PRODUCTS[productIndex].updatedAt = Date.now();
             }
 
-            // Update in Firebase if available
-            if (window.FirebaseSync && window.FirebaseSync.enabled && product.firebaseId) {
-                try {
-                    await window.FirebaseSync.updateProduct(product.firebaseId, {
+            // Update in Firestore (SINGLE SOURCE OF TRUTH)
+            try {
+                if (db && productId) {
+                    await db.collection('products').doc(productId).update({
                         isPublished: newStatus,
-                        updatedAt: new Date().toISOString()
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                     });
+                    console.log('✅ Firestore updated:', productId, 'isPublished:', newStatus);
                     showToast(newStatus ? '🚀 Product published!' : '📋 Product unpublished!', 'success');
-                } catch (e) {
-                    console.log('Firebase publish toggle failed:', e);
-                    showToast('Failed to update status', 'error');
+                } else {
+                    console.warn('Firestore not available, updating local only');
+                    showToast('Updated locally (sync when online)', 'warning');
                 }
-            } else {
-                // Update in localStorage
-                const localProducts = JSON.parse(SafeStorage.getItem('pickearn_products') || '[]');
-                const idx = localProducts.findIndex(p => p.id === productId);
-                if (idx !== -1) {
-                    localProducts[idx].isPublished = newStatus;
-                    localProducts[idx].updatedAt = new Date().toISOString();
-                    SafeStorage.setItem('pickearn_products', JSON.stringify(localProducts));
-                    showToast(newStatus ? '🚀 Product published!' : '📋 Product unpublished!', 'success');
-                }
+            } catch (error) {
+                console.error('Error updating publish status:', error);
+                showToast('Failed to update status', 'error');
             }
 
-            // Reload admin panel and user view
-            loadAdminPanel();
-            renderProducts(ALL_PRODUCTS.filter(p => p.isPublished));
+            // Refresh UI (Firestore listener will update globally)
+            prepareProductCache();
+            renderFilteredProducts();
         }
 
         // Generate 10,000 demo products using Array.from
