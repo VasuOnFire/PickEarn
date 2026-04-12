@@ -7871,10 +7871,152 @@
         console.log('✅ Virtual Scrolling System initialized');
 
         // ============================================
-        // GLOBAL FILTER STATE (USER SAFETY PROTECTION)
+        // NEXT-LEVEL FILTER SYSTEM (🔥 ULTRA PERFORMANCE)
         // ============================================
-        let currentFilter = "all"; // all | published | unpublished
+        let allProducts = [];
+        let filteredProducts = [];
+        let currentFilter = localStorage.getItem("productFilter") || "all";
+        let searchQuery = "";
         let currentView = "user"; // user | admin
+        let renderStart = 0;
+        let renderLimit = 20;
+
+        // ============================================
+        // COMBINED FILTER ENGINE (FILTER + SEARCH)
+        // ============================================
+        function applyFilters() {
+            filteredProducts = allProducts.filter(product => {
+                // Filter type check
+                let matchFilter =
+                    currentFilter === "all" ||
+                    (currentFilter === "published" && product.isPublished) ||
+                    (currentFilter === "unpublished" && !product.isPublished);
+
+                // Search check (case insensitive)
+                let matchSearch = !searchQuery ||
+                    (product.name && product.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                    (product.description && product.description.toLowerCase().includes(searchQuery.toLowerCase()));
+
+                return matchFilter && matchSearch;
+            });
+
+            updateCounts();
+
+            // Reset render position on filter change
+            renderStart = 0;
+
+            // Smooth render with requestAnimationFrame
+            requestAnimationFrame(() => {
+                virtualRender();
+            });
+
+            console.log(`⚡ Filter applied: ${currentFilter} | Search: "${searchQuery}" | Results: ${filteredProducts.length}`);
+        }
+
+        // ============================================
+        // PRODUCT COUNT BADGES
+        // ============================================
+        function updateCounts() {
+            const published = allProducts.filter(p => p.isPublished).length;
+            const unpublished = allProducts.filter(p => !p.isPublished).length;
+
+            // Update count badges if elements exist
+            const publishedCountEl = document.getElementById("publishedCount");
+            const unpublishedCountEl = document.getElementById("unpublishedCount");
+            const allCountEl = document.getElementById("allCount");
+
+            if (publishedCountEl) publishedCountEl.textContent = published;
+            if (unpublishedCountEl) unpublishedCountEl.textContent = unpublished;
+            if (allCountEl) allCountEl.textContent = allProducts.length;
+        }
+
+        // ============================================
+        // SEARCH SYSTEM (INSTANT LIVE FILTERING)
+        // ============================================
+        function handleSearch(value) {
+            searchQuery = value;
+            applyFilters();
+        }
+
+        // ============================================
+        // FILTER TAB SYSTEM (SMART TABS)
+        // ============================================
+        function setFilter(type) {
+            currentFilter = type;
+            localStorage.setItem("productFilter", type);
+            applyFilters();
+            highlightTab(type);
+        }
+
+        function highlightTab(type) {
+            // Remove active from all filter buttons
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            // Add active to current tab
+            const activeBtn = document.getElementById(type + 'Btn') ||
+                             document.getElementById('filter' + type.charAt(0).toUpperCase() + type.slice(1));
+            if (activeBtn) {
+                activeBtn.classList.add('active');
+            }
+        }
+
+        // ============================================
+        // VIRTUAL RENDER (LAZY LOADING)
+        // ============================================
+        function virtualRender() {
+            const container = document.getElementById("productsContainer");
+            if (!container) return;
+
+            // Get visible slice
+            const visibleItems = filteredProducts.slice(renderStart, renderStart + renderLimit);
+
+            // Clear and render
+            if (renderStart === 0) {
+                container.innerHTML = "";
+            }
+
+            // Append new items
+            visibleItems.forEach(product => {
+                container.innerHTML += createProductCard(product);
+            });
+        }
+
+        // ============================================
+        // LAZY LOAD MORE ON SCROLL
+        // ============================================
+        let scrollDebounce;
+        window.addEventListener("scroll", () => {
+            clearTimeout(scrollDebounce);
+            scrollDebounce = setTimeout(() => {
+                // Load more when near bottom
+                if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 300) {
+                    if (renderStart + renderLimit < filteredProducts.length) {
+                        renderStart += renderLimit;
+                        requestAnimationFrame(() => {
+                            virtualRender();
+                        });
+                        console.log(`📜 Loaded more: ${renderStart}-${renderStart + renderLimit}`);
+                    }
+                }
+            }, 100);
+        });
+
+        // ============================================
+        // LEGACY FILTER FUNCTIONS (BACKWARD COMPATIBLE)
+        // ============================================
+        function showAllProducts() {
+            setFilter("all");
+        }
+
+        function showPublishedProducts() {
+            setFilter("published");
+        }
+
+        function showUnpublishedProducts() {
+            setFilter("unpublished");
+        }
 
         // ============================================
         // FILTER BUTTON FUNCTIONS
@@ -8036,6 +8178,16 @@
         // Initialize demo products on page load
         generateDemoProducts();
         renderSections();
+
+        // ============================================
+        // RESTORE FILTER STATE ON PAGE LOAD
+        // ============================================
+        window.addEventListener('load', () => {
+            // Restore saved filter from localStorage
+            const savedFilter = localStorage.getItem("productFilter") || "all";
+            setFilter(savedFilter);
+            console.log('🔄 Restored filter state:', savedFilter);
+        });
 
         // Load Demo Products (10,000+ for scalability testing)
         async function loadDemoProducts(count = 10000) {
