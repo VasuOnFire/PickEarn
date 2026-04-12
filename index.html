@@ -7648,19 +7648,18 @@
         function deleteProduct() {
             if (!deleteProductId) return;
 
-            // Get the product being deleted to check for firebaseId
-            const allProducts = DataManager.getProducts();
-            const productToDelete = allProducts.find(p => p.id === deleteProductId);
+            // Get the product being deleted
+            const productToDelete = ALL_PRODUCTS.find(p => p.id === deleteProductId);
 
-            // Delete from localStorage (local admin products)
-            const localProducts = JSON.parse(SafeStorage.getItem('pickearn_products') || '[]');
-            const filteredLocal = localProducts.filter(p => p.id !== deleteProductId);
-            SafeStorage.setItem('pickearn_products', JSON.stringify(filteredLocal));
+            // Remove from local array
+            const index = ALL_PRODUCTS.findIndex(p => p.id === deleteProductId);
+            if (index !== -1) {
+                ALL_PRODUCTS.splice(index, 1);
+            }
 
-            // Delete from Firebase cache (if product came from Firebase)
-            const firebaseProducts = JSON.parse(SafeStorage.getItem('pickearn_firebase_products') || '[]');
-            const filteredFirebase = firebaseProducts.filter(p => p.id !== deleteProductId);
-            SafeStorage.setItem('pickearn_firebase_products', JSON.stringify(filteredFirebase));
+            // Refresh cache and UI
+            prepareProductCache();
+            renderSections();
 
             // Track deleted shared products to prevent them from reappearing
             if (productToDelete && productToDelete.source === 'shared') {
@@ -7789,27 +7788,10 @@
             renderFilteredProducts();
         }
 
-        // Generate 10,000 demo products using Array.from
-        const ALL_PRODUCTS = Array.from({ length: 10000 }, (_, i) => ({
-            id: "demo" + (i + 1),
-            name: "Demo Product " + (i + 1),
-            description: "Premium product " + (i + 1) + " with excellent features and great value for money. High quality guaranteed.",
-            price: Math.floor(Math.random() * 5000) + 100,
-            rating: parseFloat((Math.random() * 5).toFixed(1)),
-            images: [],
-            videos: [],
-            image: '',
-            video: '',
-            affiliateLink: "https://example.com/product/" + (i + 1),
-            category: "General",
-            isPublished: false, // All start as UNPUBLISHED
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-            source: 'demo'
-        }));
+        // Simple products array - starts empty, admin adds products
+        const ALL_PRODUCTS = [];
 
-        console.log('✅ Generated', ALL_PRODUCTS.length, 'demo products');
-        showToast(`🎉 Generated ${ALL_PRODUCTS.length.toLocaleString()} demo products!`, 'success');
+        console.log('✅ Products system ready');
 
         // ============================================
         // CACHED ARRAYS FOR INSTANT FILTERING (PERFORMANCE OPTIMIZATION 🔥)
@@ -11580,22 +11562,32 @@
             }
         }
 
-        // Toggle product publish status in Firestore
-        async function toggleProductPublish(productId, currentStatus) {
+        // Simple publish function using addDoc
+        async function toggleProductPublish(product) {
             try {
-                const newStatus = !currentStatus;
+                const firestoreDb = db || window.db;
 
-                await db.collection('products').doc(productId).update({
-                    isPublished: newStatus,
+                if (!firestoreDb) {
+                    throw new Error("Firestore not initialized");
+                }
+
+                // Use addDoc to create new document in Firestore
+                await firestoreDb.collection('products').add({
+                    name: product.name,
+                    price: product.price,
+                    description: product.description,
+                    images: product.images || [],
+                    rating: product.rating || 4,
+                    isPublished: true,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
 
-                console.log('✅ Product publish toggled:', productId, newStatus);
-                showToast(newStatus ? 'Product published!' : 'Product unpublished!', 'success');
+                console.log('✅ Product published successfully');
+                showToast('Product published successfully!', 'success');
             } catch (error) {
-                console.error('Error toggling publish:', error);
-                showToast('Failed to update status', 'error');
-                throw error;
+                console.error('Error publishing product:', error);
+                showToast('Failed to publish: ' + error.message, 'error');
             }
         }
 
