@@ -8215,11 +8215,19 @@
         function renderSections() {
             const unpublishedDiv = document.getElementById("unpublishedSection");
             const publishedDiv = document.getElementById("publishedSection");
-            
+
             if (!unpublishedDiv || !publishedDiv) return;
 
-            const unpublished = ALL_PRODUCTS.filter(p => !p.isPublished);
-            const published = ALL_PRODUCTS.filter(p => p.isPublished);
+            // Read from localStorage to get latest data
+            let products = JSON.parse(localStorage.getItem("pickearn_products")) || [];
+
+            // Auto-fix old products without status
+            products.forEach(p => {
+                if (!p.status) p.status = "unpublished";
+            });
+
+            const unpublished = products.filter(p => p.status === "unpublished");
+            const published = products.filter(p => p.status === "published");
 
             // Use document fragment for better performance
             let unpublishedHTML = `<h2 class="section-title">📝 Unpublished Products (${unpublished.length.toLocaleString()})</h2><div class="products-grid">`;
@@ -8231,7 +8239,7 @@
                 const batch = unpublished.slice(i, i + batchSize);
                 unpublishedHTML += batch.map(createDemoProductCard).join('');
             }
-            
+
             for (let i = 0; i < published.length; i += batchSize) {
                 const batch = published.slice(i, i + batchSize);
                 publishedHTML += batch.map(createDemoProductCard).join('');
