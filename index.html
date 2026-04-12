@@ -7791,10 +7791,78 @@
             renderFilteredProducts();
         }
 
-        // Simple products array - starts empty, admin adds products
-        const ALL_PRODUCTS = [];
+        // ============================================
+        // MANUAL PRODUCT DATA (EDITABLE)
+        // ============================================
+        // Add more products by copying the same object structure
+        // You can scale to 1000+ products manually
 
-        console.log('✅ Products system ready');
+        let ALL_PRODUCTS = [
+            {
+                id: 1,
+                name: "Power Bank",
+                price: 3799,
+                description: "Fast charging power bank with 20000mAh capacity. Supports quick charge for all devices.",
+                rating: 4.5,
+                image: "https://via.placeholder.com/200",
+                video: "https://www.youtube.com/embed/dQw4w9WgXcQ",
+                isPublished: false
+            },
+            {
+                id: 2,
+                name: "Wireless Earbuds",
+                price: 2499,
+                description: "Noise cancellation earbuds with 30-hour battery life. Crystal clear sound quality.",
+                rating: 4.2,
+                image: "https://via.placeholder.com/200",
+                video: "https://www.youtube.com/embed/dQw4w9WgXcQ",
+                isPublished: false
+            },
+            {
+                id: 3,
+                name: "Smart Watch",
+                price: 4999,
+                description: "Fitness tracking smart watch with heart rate monitor. Water resistant.",
+                rating: 4.3,
+                image: "https://via.placeholder.com/200",
+                video: "https://www.youtube.com/embed/dQw4w9WgXcQ",
+                isPublished: false
+            },
+            {
+                id: 4,
+                name: "Bluetooth Speaker",
+                price: 1899,
+                description: "Portable wireless speaker with deep bass. 12-hour playtime.",
+                rating: 4.1,
+                image: "https://via.placeholder.com/200",
+                video: "https://www.youtube.com/embed/dQw4w9WgXcQ",
+                isPublished: false
+            },
+            {
+                id: 5,
+                name: "Phone Case",
+                price: 599,
+                description: "Shockproof protective case with camera protection. Premium build.",
+                rating: 4.0,
+                image: "https://via.placeholder.com/200",
+                video: "https://www.youtube.com/embed/dQw4w9WgXcQ",
+                isPublished: false
+            }
+            // 👉 Add more products here by copying the object above
+            // Example:
+            // {
+            //     id: 6,
+            //     name: "Product Name",
+            //     price: 999,
+            //     description: "Product description",
+            //     rating: 4.0,
+            //     image: "https://via.placeholder.com/200",
+            //     video: "https://www.youtube.com/embed/dQw4w9WgXcQ",
+            //     isPublished: false
+            // }
+        ];
+
+        console.log('✅ Manual products loaded:', ALL_PRODUCTS.length, 'products');
 
         // ============================================
         // CACHED ARRAYS FOR INSTANT FILTERING (PERFORMANCE OPTIMIZATION 🔥)
