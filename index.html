@@ -11001,6 +11001,453 @@
         }
 
         console.log('✅ AI Invoice Verification System loaded successfully');
+
+        // ============================================
+        // FIREBASE AUTHENTICATION & DATABASE SYSTEM
+        // ============================================
+
+        // Firebase configuration - REPLACE WITH YOUR CONFIG
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // Admin email configuration
+        const ADMIN_EMAIL = "admin@pickearn.com"; // Change to your admin email
+
+        // Initialize Firebase
+        let app, auth, db;
+        let currentUser = null;
+        let isAdmin = false;
+        let unsubscribeProducts = null;
+
+        // Initialize Firebase when DOM is ready
+        function initFirebase() {
+            try {
+                // Check if Firebase SDK is loaded
+                if (typeof firebase === 'undefined') {
+                    console.log('Firebase SDK not loaded - loading from CDN...');
+                    loadFirebaseSDK();
+                    return;
+                }
+
+                // Initialize Firebase
+                app = firebase.initializeApp(firebaseConfig);
+                auth = firebase.auth();
+                db = firebase.firestore();
+
+                console.log('✅ Firebase initialized successfully');
+
+                // Set up auth state listener
+                setupAuthListener();
+
+                // Set up real-time products listener
+                setupProductsListener();
+
+            } catch (error) {
+                console.error('Firebase initialization error:', error);
+                showToast('Firebase initialization failed. Please check your configuration.', 'error');
+            }
+        }
+
+        // Load Firebase SDK dynamically
+        function loadFirebaseSDK() {
+            const scripts = [
+                'https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js',
+                'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js',
+                'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js'
+            ];
+
+            let loaded = 0;
+            scripts.forEach(src => {
+                const script = document.createElement('script');
+                script.src = src;
+                script.onload = () => {
+                    loaded++;
+                    if (loaded === scripts.length) {
+                        console.log('✅ Firebase SDK loaded');
+                        setTimeout(initFirebase, 100);
+                    }
+                };
+                script.onerror = () => {
+                    console.error('Failed to load Firebase SDK:', src);
+                };
+                document.head.appendChild(script);
+            });
+        }
+
+        // ============================================
+        // AUTHENTICATION SYSTEM
+        // ============================================
+
+        function setupAuthListener() {
+            auth.onAuthStateChanged((user) => {
+                if (user) {
+                    // User is signed in
+                    currentUser = user;
+                    isAdmin = user.email === ADMIN_EMAIL;
+
+                    console.log('✅ User logged in:', user.email, '| Admin:', isAdmin);
+
+                    // Load user profile from Firestore
+                    loadUserProfile(user.uid);
+
+                    // Show app, hide login
+                    showApp();
+
+                    // Update UI for admin/user
+                    updateUIForRole();
+
+                } else {
+                    // User is signed out
+                    currentUser = null;
+                    isAdmin = false;
+
+                    console.log('👋 User logged out');
+
+                    // Show login, hide app
+                    showLogin();
+                }
+            });
+        }
+
+        // Sign up new user
+        async function signUp(email, password, name) {
+            try {
+                showToast('Creating account...', 'info');
+
+                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                const user = userCredential.user;
+
+                // Update profile
+                await user.updateProfile({ displayName: name });
+
+                // Create user document in Firestore
+                await db.collection('users').doc(user.uid).set({
+                    email: email,
+                    name: name,
+                    profileImage: '',
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                console.log('✅ User created:', user.uid);
+                showToast('Account created successfully!', 'success');
+
+                return user;
+            } catch (error) {
+                console.error('Signup error:', error);
+                handleAuthError(error);
+                throw error;
+            }
+        }
+
+        // Login existing user
+        async function login(email, password) {
+            try {
+                showToast('Logging in...', 'info');
+
+                const userCredential = await auth.signInWithEmailAndPassword(email, password);
+                const user = userCredential.user;
+
+                // Update last login
+                await db.collection('users').doc(user.uid).update({
+                    lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                console.log('✅ User logged in:', user.uid);
+                showToast('Welcome back!', 'success');
+
+                return user;
+            } catch (error) {
+                console.error('Login error:', error);
+                handleAuthError(error);
+                throw error;
+            }
+        }
+
+        // Logout user
+        async function logout() {
+            try {
+                await auth.signOut();
+                showToast('Logged out successfully', 'success');
+            } catch (error) {
+                console.error('Logout error:', error);
+                showToast('Error logging out', 'error');
+            }
+        }
+
+        // Handle auth errors
+        function handleAuthError(error) {
+            let message = 'Authentication failed';
+
+            switch (error.code) {
+                case 'auth/invalid-email':
+                    message = 'Invalid email address';
+                    break;
+                case 'auth/user-disabled':
+                    message = 'Account has been disabled';
+                    break;
+                case 'auth/user-not-found':
+                    message = 'No account found with this email';
+                    break;
+                case 'auth/wrong-password':
+                    message = 'Incorrect password';
+                    break;
+                case 'auth/email-already-in-use':
+                    message = 'Email already registered';
+                    break;
+                case 'auth/weak-password':
+                    message = 'Password should be at least 6 characters';
+                    break;
+                case 'auth/network-request-failed':
+                    message = 'Network error. Check your connection';
+                    break;
+                default:
+                    message = error.message;
+            }
+
+            showToast(message, 'error');
+        }
+
+        // ============================================
+        // PROFILE IMAGE SYNC (BASE64 IN FIRESTORE)
+        // ============================================
+
+        async function loadUserProfile(userId) {
+            try {
+                const doc = await db.collection('users').doc(userId).get();
+
+                if (doc.exists) {
+                    const userData = doc.data();
+
+                    // Update profile image
+                    if (userData.profileImage) {
+                        updateProfileImageUI(userData.profileImage);
+                    }
+
+                    console.log('✅ User profile loaded');
+                }
+            } catch (error) {
+                console.error('Error loading user profile:', error);
+            }
+        }
+
+        async function updateProfileImage(userId, imageBase64) {
+            try {
+                await db.collection('users').doc(userId).update({
+                    profileImage: imageBase64,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                updateProfileImageUI(imageBase64);
+                showToast('Profile image updated!', 'success');
+
+                console.log('✅ Profile image synced to Firestore');
+            } catch (error) {
+                console.error('Error updating profile image:', error);
+                showToast('Failed to update profile image', 'error');
+            }
+        }
+
+        function updateProfileImageUI(imageBase64) {
+            const profileImg = document.getElementById('profileImage');
+            if (profileImg && imageBase64) {
+                profileImg.src = imageBase64;
+            }
+        }
+
+        // Convert image file to Base64
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // ============================================
+        // ADMIN SECURITY
+        // ============================================
+
+        function updateUIForRole() {
+            const adminElements = document.querySelectorAll('.admin-only');
+            const userElements = document.querySelectorAll('.user-only');
+
+            if (isAdmin) {
+                // Show admin elements, hide user-only
+                adminElements.forEach(el => el.style.display = '');
+                userElements.forEach(el => el.style.display = 'none');
+
+                // Enable admin panel access
+                const adminPanelBtn = document.getElementById('adminPanelBtn');
+                if (adminPanelBtn) adminPanelBtn.style.display = 'flex';
+
+            } else {
+                // Hide admin elements, show user-only
+                adminElements.forEach(el => el.style.display = 'none');
+                userElements.forEach(el => el.style.display = '');
+
+                // Hide admin panel button
+                const adminPanelBtn = document.getElementById('adminPanelBtn');
+                if (adminPanelBtn) adminPanelBtn.style.display = 'none';
+            }
+        }
+
+        function checkAdminAccess() {
+            if (!isAdmin) {
+                showToast('Unauthorized access', 'error');
+                showSection('dashboard');
+                return false;
+            }
+            return true;
+        }
+
+        // ============================================
+        // FIRESTORE PRODUCTS - REAL-TIME SYNC
+        // ============================================
+
+        function setupProductsListener() {
+            // Unsubscribe from previous listener if exists
+            if (unsubscribeProducts) {
+                unsubscribeProducts();
+            }
+
+            // Set up real-time listener
+            unsubscribeProducts = db.collection('products')
+                .orderBy('createdAt', 'desc')
+                .onSnapshot((snapshot) => {
+                    const products = [];
+
+                    snapshot.forEach((doc) => {
+                        products.push({
+                            id: doc.id,
+                            ...doc.data()
+                        });
+                    });
+
+                    // Update global products
+                    allProducts = products;
+
+                    // Update cache
+                    prepareProductCache();
+
+                    // Apply filters and render
+                    applyFilters();
+
+                    console.log('✅ Products synced:', products.length, 'items');
+                }, (error) => {
+                    console.error('Products listener error:', error);
+                });
+        }
+
+        // Add product to Firestore
+        async function addProductToFirestore(productData) {
+            try {
+                const docRef = await db.collection('products').add({
+                    ...productData,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                console.log('✅ Product added:', docRef.id);
+                showToast('Product added successfully!', 'success');
+
+                return docRef.id;
+            } catch (error) {
+                console.error('Error adding product:', error);
+                showToast('Failed to add product', 'error');
+                throw error;
+            }
+        }
+
+        // Update product in Firestore
+        async function updateProductInFirestore(productId, updates) {
+            try {
+                await db.collection('products').doc(productId).update({
+                    ...updates,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                console.log('✅ Product updated:', productId);
+                showToast('Product updated!', 'success');
+            } catch (error) {
+                console.error('Error updating product:', error);
+                showToast('Failed to update product', 'error');
+                throw error;
+            }
+        }
+
+        // Delete product from Firestore
+        async function deleteProductFromFirestore(productId) {
+            try {
+                await db.collection('products').doc(productId).delete();
+
+                console.log('✅ Product deleted:', productId);
+                showToast('Product deleted!', 'success');
+            } catch (error) {
+                console.error('Error deleting product:', error);
+                showToast('Failed to delete product', 'error');
+                throw error;
+            }
+        }
+
+        // Toggle product publish status in Firestore
+        async function toggleProductPublish(productId, currentStatus) {
+            try {
+                const newStatus = !currentStatus;
+
+                await db.collection('products').doc(productId).update({
+                    isPublished: newStatus,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                console.log('✅ Product publish toggled:', productId, newStatus);
+                showToast(newStatus ? 'Product published!' : 'Product unpublished!', 'success');
+            } catch (error) {
+                console.error('Error toggling publish:', error);
+                showToast('Failed to update status', 'error');
+                throw error;
+            }
+        }
+
+        // ============================================
+        // UI HELPERS
+        // ============================================
+
+        function showLogin() {
+            const loginSection = document.getElementById('loginSection');
+            const appSection = document.getElementById('appSection');
+
+            if (loginSection) loginSection.style.display = 'flex';
+            if (appSection) appSection.style.display = 'none';
+        }
+
+        function showApp() {
+            const loginSection = document.getElementById('loginSection');
+            const appSection = document.getElementById('appSection');
+
+            if (loginSection) loginSection.style.display = 'none';
+            if (appSection) appSection.style.display = 'block';
+        }
+
+        // ============================================
+        // INITIALIZE FIREBASE ON LOAD
+        // ============================================
+
+        // Start Firebase initialization
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initFirebase);
+        } else {
+            initFirebase();
+        }
+
+        console.log('✅ Firebase Auth & Database System ready');
     </script>
 </body>
 </html>
