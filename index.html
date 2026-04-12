@@ -7765,6 +7765,27 @@
         showToast(`🎉 Generated ${ALL_PRODUCTS.length.toLocaleString()} demo products!`, 'success');
 
         // ============================================
+        // CACHED ARRAYS FOR INSTANT FILTERING (PERFORMANCE OPTIMIZATION 🔥)
+        // ============================================
+        let PUBLISHED_PRODUCTS = [];
+        let UNPUBLISHED_PRODUCTS = [];
+
+        // Pre-calculate filtered arrays (called once on load, updated on changes)
+        function prepareProductCache(products) {
+            // Use ALL_PRODUCTS if no products passed
+            const sourceProducts = products || ALL_PRODUCTS;
+
+            // Pre-calculate filtered arrays (NO LOOP on every filter switch!)
+            PUBLISHED_PRODUCTS = sourceProducts.filter(p => p.isPublished === true);
+            UNPUBLISHED_PRODUCTS = sourceProducts.filter(p => p.isPublished === false);
+
+            console.log('📦 Cache prepared:', PUBLISHED_PRODUCTS.length, 'published,', UNPUBLISHED_PRODUCTS.length, 'unpublished');
+        }
+
+        // Initialize cache immediately
+        prepareProductCache();
+
+        // ============================================
         // GLOBAL FILTER STATE (USER SAFETY PROTECTION)
         // ============================================
         let currentFilter = "all"; // all | published | unpublished
@@ -7792,25 +7813,25 @@
         // CORE FILTER LOGIC (CRITICAL USER SAFETY 🔐)
         // ============================================
         function renderFilteredProducts() {
-            let filtered = [];
+            let data = [];
 
             if (currentView === "user") {
-                // 🚨 USER MUST SEE ONLY PUBLISHED PRODUCTS
-                filtered = ALL_PRODUCTS.filter(p => p.isPublished === true);
+                // 🚨 USER MUST SEE ONLY PUBLISHED PRODUCTS (USE CACHE ⚡)
+                data = PUBLISHED_PRODUCTS;
             } else {
-                // ADMIN VIEW WITH FILTERS
+                // ADMIN VIEW WITH FILTERS (USE CACHE - NO LOOP! 🚀)
                 if (currentFilter === "published") {
-                    filtered = ALL_PRODUCTS.filter(p => p.isPublished === true);
+                    data = PUBLISHED_PRODUCTS;
                 } else if (currentFilter === "unpublished") {
-                    filtered = ALL_PRODUCTS.filter(p => p.isPublished === false);
+                    data = UNPUBLISHED_PRODUCTS;
                 } else {
                     // Show all products
-                    filtered = ALL_PRODUCTS;
+                    data = ALL_PRODUCTS;
                 }
             }
 
-            console.log("Current View:", currentView, "| Filter:", currentFilter, "| Products:", filtered.length);
-            renderProducts(filtered);
+            console.log("⚡ Cached View:", currentView, "| Filter:", currentFilter, "| Products:", data.length);
+            renderProducts(data);
         }
 
         // ============================================
@@ -7896,6 +7917,10 @@
                 product.isPublished = !product.isPublished;
                 product.updatedAt = Date.now();
                 showToast(product.isPublished ? '🚀 Product published!' : '📋 Product unpublished!', 'success');
+
+                // Update cache after status change (FAST! ⚡)
+                prepareProductCache();
+
                 renderSections();
                 renderFilteredProducts(); // Use filtered rendering for consistency
             }
