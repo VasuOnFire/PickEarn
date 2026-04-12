@@ -7711,158 +7711,96 @@
             console.log(`🎨 Rendered ${products.length} products to container`);
         }
 
-        // Toggle product publish status - FIRESTORE SYNC 🔥
-        async function togglePublish(productId, currentStatus, productData) {
-            const newStatus = !currentStatus;
-            console.log("Publishing:", productId, "status:", newStatus);
+        // Toggle product publish status - LOCAL ONLY (NO FIREBASE)
+        function togglePublish(productId) {
+            const newStatus = !product.isPublished;
+            console.log("Toggling publish:", productId, "→", newStatus);
 
-            // Get product from passed data or local array
-            let product = productData;
-            if (!product) {
-                const productIndex = ALL_PRODUCTS.findIndex(p => p.id === productId);
-                product = productIndex !== -1 ? ALL_PRODUCTS[productIndex] : null;
-            }
-
-            if (!product) {
+            // Find product in ALL_PRODUCTS
+            const productIndex = ALL_PRODUCTS.findIndex(p => p.id === productId);
+            if (productIndex === -1) {
                 console.error("Product not found:", productId);
                 showToast("Product not found", 'error');
                 return;
             }
 
-            // Use window.db as fallback if db is not in local scope
-            const firestoreDb = db || window.db;
+            // Toggle status
+            ALL_PRODUCTS[productIndex].isPublished = newStatus;
+            ALL_PRODUCTS[productIndex].updatedAt = Date.now();
 
-            try {
-                if (!firestoreDb) {
-                    console.error("DB Check - db:", db, "window.db:", window.db);
-                    throw new Error("Firestore not initialized. Please refresh the page.");
-                }
+            // Update cached arrays
+            prepareProductCache();
 
-                // Check if product exists in Firestore
-                const firestoreId = firestoreProductIds.get(productId);
-
-                if (newStatus && !firestoreId) {
-                    // NEW PRODUCT: Use addDoc to CREATE new document in Firestore
-                    const docRef = await firestoreDb.collection('products').add({
-                        name: product.name,
-                        price: product.price,
-                        description: product.description,
-                        images: product.images || [],
-                        rating: product.rating || 4,
-                        isPublished: true,
-                        sourceProductId: productId,
-                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                    });
-
-                    // Store mapping
-                    firestoreProductIds.set(productId, docRef.id);
-
-                    console.log("✅ Product added to Firestore:", docRef.id);
-                    showToast("🚀 Product published successfully!", 'success');
-
-                } else if (firestoreId) {
-                    // EXISTING FIRESTORE PRODUCT: Use updateDoc
-                    await firestoreDb.collection('products').doc(firestoreId).update({
-                        isPublished: newStatus,
-                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                    });
-
-                    console.log('✅ Firestore updated:', firestoreId, 'isPublished:', newStatus);
-                    showToast(newStatus ? '🚀 Product published!' : '📋 Product unpublished!', 'success');
-                } else {
-                    // Unpublishing a product not in Firestore (no-op for Firestore)
-                    console.log('Product not in Firestore, updating local only');
-                    showToast('Product unpublished locally', 'success');
-                }
-
-                // Update product status
-                product.isPublished = newStatus;
-                product.updatedAt = Date.now();
-
-            } catch (error) {
-                console.error("Update failed:", error);
-                showToast("❌ Failed to update status: " + error.message, 'error');
-                return;
-            }
+            // Show success message
+            showToast(newStatus ? '🚀 Product published!' : '📋 Product unpublished!', 'success');
 
             // Refresh UI
-            prepareProductCache();
-            renderFilteredProducts();
+            renderSections();
+
+            console.log('✅ Product status updated:', productId, 'isPublished:', newStatus);
         }
 
         // ============================================
-        // MANUAL PRODUCT DATA (EDITABLE)
+        // 10,000 PRODUCTS - PROGRAMMATICALLY GENERATED
         // ============================================
-        // Add more products by copying the same object structure
-        // You can scale to 1000+ products manually
 
-        let ALL_PRODUCTS = [
-            {
-                id: 1,
-                name: "Power Bank",
-                price: 3799,
-                description: "Fast charging power bank with 20000mAh capacity. Supports quick charge for all devices.",
-                rating: 4.5,
-                image: "https://via.placeholder.com/200",
-                video: "https://www.youtube.com/embed/dQw4w9WgXcQ",
-                isPublished: false
-            },
-            {
-                id: 2,
-                name: "Wireless Earbuds",
-                price: 2499,
-                description: "Noise cancellation earbuds with 30-hour battery life. Crystal clear sound quality.",
-                rating: 4.2,
-                image: "https://via.placeholder.com/200",
-                video: "https://www.youtube.com/embed/dQw4w9WgXcQ",
-                isPublished: false
-            },
-            {
-                id: 3,
-                name: "Smart Watch",
-                price: 4999,
-                description: "Fitness tracking smart watch with heart rate monitor. Water resistant.",
-                rating: 4.3,
-                image: "https://via.placeholder.com/200",
-                video: "https://www.youtube.com/embed/dQw4w9WgXcQ",
-                isPublished: false
-            },
-            {
-                id: 4,
-                name: "Bluetooth Speaker",
-                price: 1899,
-                description: "Portable wireless speaker with deep bass. 12-hour playtime.",
-                rating: 4.1,
-                image: "https://via.placeholder.com/200",
-                video: "https://www.youtube.com/embed/dQw4w9WgXcQ",
-                isPublished: false
-            },
-            {
-                id: 5,
-                name: "Phone Case",
-                price: 599,
-                description: "Shockproof protective case with camera protection. Premium build.",
-                rating: 4.0,
-                image: "https://via.placeholder.com/200",
-                video: "https://www.youtube.com/embed/dQw4w9WgXcQ",
-                isPublished: false
-            }
-            // 👉 Add more products here by copying the object above
-            // Example:
-            // {
-            //     id: 6,
-            //     name: "Product Name",
-            //     price: 999,
-            //     description: "Product description",
-            //     rating: 4.0,
-            //     image: "https://via.placeholder.com/200",
-            //     video: "https://www.youtube.com/embed/dQw4w9WgXcQ",
-            //     isPublished: false
-            // }
+        const productTemplates = [
+            { name: "Wireless Earbuds", basePrice: 1500, category: "Audio" },
+            { name: "Bluetooth Speaker", basePrice: 2000, category: "Audio" },
+            { name: "Power Bank", basePrice: 1200, category: "Accessories" },
+            { name: "Phone Case", basePrice: 500, category: "Accessories" },
+            { name: "Screen Protector", basePrice: 300, category: "Accessories" },
+            { name: "Charging Cable", basePrice: 400, category: "Accessories" },
+            { name: "Car Charger", basePrice: 800, category: "Accessories" },
+            { name: "Phone Stand", basePrice: 600, category: "Accessories" },
+            { name: "Selfie Stick", basePrice: 700, category: "Accessories" },
+            { name: "Phone Lens Kit", basePrice: 1500, category: "Accessories" },
+            { name: "Smart Watch", basePrice: 3500, category: "Wearables" },
+            { name: "Fitness Band", basePrice: 2500, category: "Wearables" },
+            { name: "Wireless Mouse", basePrice: 900, category: "Computer" },
+            { name: "Keyboard", basePrice: 1500, category: "Computer" },
+            { name: "USB Hub", basePrice: 1100, category: "Computer" },
+            { name: "Webcam", basePrice: 2500, category: "Computer" },
+            { name: "Microphone", basePrice: 3000, category: "Audio" },
+            { name: "Headphones", basePrice: 2800, category: "Audio" },
+            { name: "Laptop Stand", basePrice: 1800, category: "Computer" },
+            { name: "Desk Lamp", basePrice: 1600, category: "Home" }
         ];
 
-        console.log('✅ Manual products loaded:', ALL_PRODUCTS.length, 'products');
+        const descriptions = [
+            "Premium quality product with excellent features and great value for money.",
+            "High performance device designed for everyday use with durable build quality.",
+            "Advanced technology product with modern features and sleek design.",
+            "Professional grade equipment suitable for both home and office use.",
+            "Compact and portable solution perfect for travel and daily commute.",
+            "Ergonomic design with user-friendly interface and reliable performance.",
+            "Energy efficient product with long-lasting durability and warranty.",
+            "Stylish and functional accessory that complements your lifestyle."
+        ];
+
+        // Generate 10,000 products
+        const ALL_PRODUCTS = Array.from({ length: 10000 }, (_, i) => {
+            const template = productTemplates[i % productTemplates.length];
+            const variant = Math.floor(i / productTemplates.length) + 1;
+            const priceVariation = Math.floor(Math.random() * 1000) - 500;
+            
+            return {
+                id: i + 1,
+                name: `${template.name} ${variant > 1 ? 'Pro ' + variant : ''}`,
+                price: Math.max(100, template.basePrice + priceVariation),
+                description: descriptions[i % descriptions.length],
+                rating: parseFloat((3.5 + Math.random() * 1.5).toFixed(1)),
+                image: `https://via.placeholder.com/200?text=${encodeURIComponent(template.name)}`,
+                video: i % 3 === 0 ? "https://www.youtube.com/embed/dQw4w9WgXcQ" : null,
+                category: template.category,
+                isPublished: false,
+                createdAt: Date.now() - Math.floor(Math.random() * 1000000000),
+                updatedAt: Date.now()
+            };
+        });
+
+        console.log('✅ Generated', ALL_PRODUCTS.length, 'products');
+        showToast(`🎉 Generated ${ALL_PRODUCTS.length.toLocaleString()} products!`, 'success');
 
         // ============================================
         // CACHED ARRAYS FOR INSTANT FILTERING (PERFORMANCE OPTIMIZATION 🔥)
