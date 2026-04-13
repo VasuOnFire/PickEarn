@@ -2,6 +2,16 @@
 // 1000 MANUAL PRODUCTS - NO LOOPS
 // ============================================
 // Each product is individually defined for easy editing
+//
+// DEMO URLS: Products contain placeholder image/video URLs that can be easily replaced:
+// - Images: https://placehold.co/400x400/[color]/white?text=Product+[ID]
+// - Videos: https://www.youtube.com/embed/dQw4w9WgXcQ (sample video)
+//
+// To replace all URLs, use find/replace in your editor:
+// - Find: https://placehold.co/400x400/.../white?text=Product+[N]
+// - Replace with your actual image URL
+//
+// ============================================
 
 const ALL_PRODUCTS = [
     // Product 1
@@ -11,8 +21,8 @@ const ALL_PRODUCTS = [
         price: 0,
         description: "Edit description",
         rating: 0,
-        images: [""],
-        video: "",
+        images: ["https://placehold.co/400x400/orange/white?text=Product+1"],
+        video: "https://www.youtube.com/embed/dQw4w9WgXcQ",
         category: "electronics",
         isPublished: false
     },
@@ -23,7 +33,7 @@ const ALL_PRODUCTS = [
         price: 0,
         description: "Edit description",
         rating: 0,
-        images: [""],
+        images: ["https://placehold.co/400x400/blue/white?text=Product+2"],
         video: "",
         category: "electronics",
         isPublished: false
@@ -35,7 +45,7 @@ const ALL_PRODUCTS = [
         price: 0,
         description: "Edit description",
         rating: 0,
-        images: [""],
+        images: ["https://placehold.co/400x400/green/white?text=Product+3"],
         video: "",
         category: "electronics",
         isPublished: false
@@ -47,8 +57,8 @@ const ALL_PRODUCTS = [
         price: 0,
         description: "Edit description",
         rating: 0,
-        images: [""],
-        video: "",
+        images: ["https://placehold.co/400x400/purple/white?text=Product+4"],
+        video: "https://www.youtube.com/embed/dQw4w9WgXcQ",
         category: "electronics",
         isPublished: false
     },
@@ -59,7 +69,7 @@ const ALL_PRODUCTS = [
         price: 0,
         description: "Edit description",
         rating: 0,
-        images: [""],
+        images: ["https://placehold.co/400x400/red/white?text=Product+5"],
         video: "",
         category: "electronics",
         isPublished: false

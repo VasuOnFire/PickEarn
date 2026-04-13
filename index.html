@@ -9237,80 +9237,97 @@
                 status = 'approved'; // Auto-approve high scores
             }
 
-            // Create submission with full security data
-            const submission = {
-                id: 'INV-' + Date.now(),
-                userId: currentUser.id,
-                username: currentUser.username,
-                productName,
-                productId,
-                orderId,
-                amount,
-                fileName: selectedInvoiceFile.name,
-                fileSize: selectedInvoiceFile.size,
-                fileHash: fileHash,
-                deviceId: deviceInfo.deviceId,
-                sessionId: deviceInfo.sessionId,
-                upiId: upiId,
-                aiExtractedData: currentExtractedData,
-                aiConfidence: currentExtractedData ? currentExtractedData.confidence : 0,
-                status: status,
-                coins: coins,
-                isFraudAttempt: false,
-                rejectionReason: null,
-                fraudScore: securityCheck.fraudScore.score,
-                fraudDetails: securityCheck.fraudScore,
-                securityChecks: {
-                    passed: securityCheck.passed,
-                    warnings: securityCheck.warnings
-                },
-                createdAt: new Date().toISOString(),
-                processedAt: status === 'approved' ? new Date().toISOString() : null
+            // Read file content using FileReader
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const fileContent = e.target.result;
+
+                // Create submission with full security data
+                const submission = {
+                    id: 'INV-' + Date.now(),
+                    userId: currentUser.id,
+                    username: currentUser.username,
+                    productName,
+                    productId,
+                    orderId,
+                    amount,
+                    fileName: selectedInvoiceFile.name,
+                    fileSize: selectedInvoiceFile.size,
+                    fileHash: fileHash,
+                    fileContent: fileContent, // Store file content as base64
+                    deviceId: deviceInfo.deviceId,
+                    sessionId: deviceInfo.sessionId,
+                    upiId: upiId,
+                    aiExtractedData: currentExtractedData,
+                    aiConfidence: currentExtractedData ? currentExtractedData.confidence : 0,
+                    status: status,
+                    coins: coins,
+                    isFraudAttempt: false,
+                    rejectionReason: null,
+                    fraudScore: securityCheck.fraudScore.score,
+                    fraudDetails: securityCheck.fraudScore,
+                    securityChecks: {
+                        passed: securityCheck.passed,
+                        warnings: securityCheck.warnings
+                    },
+                    createdAt: new Date().toISOString(),
+                    processedAt: status === 'approved' ? new Date().toISOString() : null
+                };
+
+                // Save submission
+                DataManager.addInvoiceSubmission(submission);
+
+                // Add to verified invoices
+                DataManager.addVerifiedInvoice({
+                    fileHash: fileHash,
+                    orderId: orderId,
+                    productId: productId,
+                    userId: currentUser.id,
+                    username: currentUser.username,
+                    productName,
+                    amount,
+                    status: status
+                });
+
+                // Log user activity
+                DataManager.addUserActivity(currentUser.id, {
+                    type: 'submission',
+                    submissionId: submission.id,
+                    productId,
+                    amount,
+                    fraudScore: securityCheck.fraudScore.score
+                });
+
+                // Add coins (confirmed if auto-approved, pending otherwise)
+                if (status === 'approved') {
+                    DataManager.addConfirmedCoins(currentUser.id, coins);
+                    showToast(`✅ Auto-approved! ${coins} coins added to your wallet!`, 'success');
+                } else {
+                    DataManager.addPendingCoins(currentUser.id, coins);
+                    showToast(`⏳ Submitted for review! ${coins} coins pending approval.`, 'info');
+                }
+
+                // Update UI
+                updateWalletDisplay();
+                renderUserSubmissions();
+
+                // Show success message with fraud score
+                showSubmissionSuccess(securityCheck.fraudScore, coins, status);
+
+                // Reset form
+                resetAIInvoiceForm();
+                submitBtn.textContent = '🔍 Verify & Submit';
             };
 
-            // Save submission
-            DataManager.addInvoiceSubmission(submission);
+            reader.onerror = function() {
+                showToast('❌ Error reading file. Please try again.', 'error');
+                submitBtn.disabled = false;
+                submitBtn.textContent = '🔍 Verify & Submit';
+            };
 
-            // Add to verified invoices
-            DataManager.addVerifiedInvoice({
-                fileHash: fileHash,
-                orderId: orderId,
-                productId: productId,
-                userId: currentUser.id,
-                username: currentUser.username,
-                productName,
-                amount,
-                status: status
-            });
-
-            // Log user activity
-            DataManager.addUserActivity(currentUser.id, {
-                type: 'submission',
-                submissionId: submission.id,
-                productId,
-                amount,
-                fraudScore: securityCheck.fraudScore.score
-            });
-
-            // Add coins (confirmed if auto-approved, pending otherwise)
-            if (status === 'approved') {
-                DataManager.addConfirmedCoins(currentUser.id, coins);
-                showToast(`✅ Auto-approved! ${coins} coins added to your wallet!`, 'success');
-            } else {
-                DataManager.addPendingCoins(currentUser.id, coins);
-                showToast(`⏳ Submitted for review! ${coins} coins pending approval.`, 'info');
-            }
-
-            // Update UI
-            updateWalletDisplay();
-            renderUserSubmissions();
-
-            // Show success message with fraud score
-            showSubmissionSuccess(securityCheck.fraudScore, coins, status);
-
-            // Reset form
-            resetAIInvoiceForm();
-            submitBtn.textContent = '🔍 Verify & Submit';
+            // Read file as Data URL (base64)
+            reader.readAsDataURL(selectedInvoiceFile);
+            return; // Exit early, rest of logic is in onload handler
         }
 
         // Display fraud score results in UI
