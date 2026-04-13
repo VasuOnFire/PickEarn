@@ -4635,6 +4635,7 @@
         </main>
     </div>
 
+    <script src="products_manual.js"></script>
     <script>
         // Config
         const SECRET_PASSWORD = '363636';
@@ -6634,11 +6635,12 @@
             const grid = document.getElementById('adminProductsGrid');
             const empty = document.getElementById('adminEmptyState');
 
-            // If no arguments passed, get all products and split
+            // If no arguments passed, get all products from localStorage and split by status
             if (arguments.length === 0) {
-                const allProducts = DataManager.getProducts();
-                published = allProducts.filter(p => p.isPublished === true);
-                unpublished = allProducts.filter(p => p.isPublished !== true);
+                const stored = localStorage.getItem("pickearn_products");
+                const allProducts = stored ? JSON.parse(stored) : [];
+                published = allProducts.filter(p => p.status === "published");
+                unpublished = allProducts.filter(p => p.status === "unpublished");
             }
 
             const totalProducts = published.length + unpublished.length;
@@ -7787,71 +7789,24 @@
         }
 
         // ============================================
-        // 10,000 PRODUCTS - PROGRAMMATICALLY GENERATED
+        // 1,000 PRODUCTS - MANUALLY DEFINED IN products_manual.js
         // ============================================
-
-        const productTemplates = [
-            { name: "Wireless Earbuds", basePrice: 1500, category: "Audio" },
-            { name: "Bluetooth Speaker", basePrice: 2000, category: "Audio" },
-            { name: "Power Bank", basePrice: 1200, category: "Accessories" },
-            { name: "Phone Case", basePrice: 500, category: "Accessories" },
-            { name: "Screen Protector", basePrice: 300, category: "Accessories" },
-            { name: "Charging Cable", basePrice: 400, category: "Accessories" },
-            { name: "Car Charger", basePrice: 800, category: "Accessories" },
-            { name: "Phone Stand", basePrice: 600, category: "Accessories" },
-            { name: "Selfie Stick", basePrice: 700, category: "Accessories" },
-            { name: "Phone Lens Kit", basePrice: 1500, category: "Accessories" },
-            { name: "Smart Watch", basePrice: 3500, category: "Wearables" },
-            { name: "Fitness Band", basePrice: 2500, category: "Wearables" },
-            { name: "Wireless Mouse", basePrice: 900, category: "Computer" },
-            { name: "Keyboard", basePrice: 1500, category: "Computer" },
-            { name: "USB Hub", basePrice: 1100, category: "Computer" },
-            { name: "Webcam", basePrice: 2500, category: "Computer" },
-            { name: "Microphone", basePrice: 3000, category: "Audio" },
-            { name: "Headphones", basePrice: 2800, category: "Audio" },
-            { name: "Laptop Stand", basePrice: 1800, category: "Computer" },
-            { name: "Desk Lamp", basePrice: 1600, category: "Home" }
-        ];
-
-        const descriptions = [
-            "Premium quality product with excellent features and great value for money.",
-            "High performance device designed for everyday use with durable build quality.",
-            "Advanced technology product with modern features and sleek design.",
-            "Professional grade equipment suitable for both home and office use.",
-            "Compact and portable solution perfect for travel and daily commute.",
-            "Ergonomic design with user-friendly interface and reliable performance.",
-            "Energy efficient product with long-lasting durability and warranty.",
-            "Stylish and functional accessory that complements your lifestyle."
-        ];
-
-        // Generate 10,000 products with status field
-        const ALL_PRODUCTS = Array.from({ length: 10000 }, (_, i) => {
-            const template = productTemplates[i % productTemplates.length];
-            const variant = Math.floor(i / productTemplates.length) + 1;
-            const priceVariation = Math.floor(Math.random() * 1000) - 500;
-
-            return {
-                id: i + 1,
-                name: `${template.name} ${variant > 1 ? 'Pro ' + variant : ''}`,
-                price: Math.max(100, template.basePrice + priceVariation),
-                description: descriptions[i % descriptions.length],
-                rating: parseFloat((3.5 + Math.random() * 1.5).toFixed(1)),
-                image: `https://via.placeholder.com/200?text=${encodeURIComponent(template.name)}`,
-                video: i % 3 === 0 ? "https://www.youtube.com/embed/dQw4w9WgXcQ" : null,
-                category: template.category,
-                status: "unpublished",  // Using status field: "published" | "unpublished"
-                createdAt: Date.now() - Math.floor(Math.random() * 1000000000),
-                updatedAt: Date.now()
-            };
-        });
+        // ALL_PRODUCTS array is loaded from products_manual.js
+        // which contains 1000 manually defined product objects
+        // Each product has: id, name, price, description, rating, images, video, category, isPublished
 
         // Initialize localStorage with products (only on first load)
         function initializeLocalStorage() {
             const stored = localStorage.getItem("pickearn_products");
             if (!stored) {
-                console.log("Initializing localStorage with", ALL_PRODUCTS.length, "products");
-                localStorage.setItem("pickearn_products", JSON.stringify(ALL_PRODUCTS));
-                showToast(`🎉 Initialized ${ALL_PRODUCTS.length.toLocaleString()} products!`, 'success');
+                // Convert isPublished to status for compatibility
+                const productsWithStatus = ALL_PRODUCTS.map(p => ({
+                    ...p,
+                    status: p.isPublished ? "published" : "unpublished"
+                }));
+                console.log("Initializing localStorage with", productsWithStatus.length, "products");
+                localStorage.setItem("pickearn_products", JSON.stringify(productsWithStatus));
+                showToast(`🎉 Initialized ${productsWithStatus.length.toLocaleString()} products!`, 'success');
             } else {
                 console.log("Products already in localStorage");
             }
@@ -8102,36 +8057,24 @@
         });
 
         // ============================================
-        // LEGACY FILTER FUNCTIONS (BACKWARD COMPATIBLE)
-        // ============================================
-        function showAllProducts() {
-            setFilter("all");
-        }
-
-        function showPublishedProducts() {
-            setFilter("published");
-        }
-
-        function showUnpublishedProducts() {
-            setFilter("unpublished");
-        }
-
-        // ============================================
         // FILTER BUTTON FUNCTIONS
         // ============================================
         function showAllProducts() {
             currentFilter = "all";
             renderFilteredProducts();
+            renderAdminProducts(); // Also update admin sections view
         }
 
         function showPublishedProducts() {
             currentFilter = "published";
             renderFilteredProducts();
+            renderAdminProducts(); // Also update admin sections view
         }
 
         function showUnpublishedProducts() {
             currentFilter = "unpublished";
             renderFilteredProducts();
+            renderAdminProducts(); // Also update admin sections view
         }
 
         // ============================================
